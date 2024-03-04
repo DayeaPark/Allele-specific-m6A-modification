@@ -1,0 +1,17 @@
+name: m6Anet
+channels:
+- conda-forge
+- bioconda
+- defaults
+- rmg
+
+dependencies:
+- python=3.9
+- bowtie2
+- samtools
+- bedtools
+- guppy
+- pip
+- pip:
+  - guppy3
+  - m6anet
