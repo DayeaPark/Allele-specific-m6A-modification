@@ -5,9 +5,9 @@ In this research, we utilized hybrid mouse embryonic stem cells (mESC from C57BL
 
 Each data were downloaded from following: <br> <br>
 Mouse: 
-* Transcriptome reference and annotation GTF https://appris.bioinfo.cnio.es/#/downloads
-* Genomic VCF https://www.mousegenomes.org/
+* Transcriptome reference and annotation GTF: https://appris.bioinfo.cnio.es/#/downloads
+* Genomic VCF: https://www.mousegenomes.org/
 
 NA12878 : 
-* Transcriptome reference and annotation GTF https://appris.bioinfo.cnio.es/#/downloads
-* Genomic VCF https://hgdownload.soe.ucsc.edu/gbdb/hg38/platinumGenomes/
+* Transcriptome reference and annotation GTF: https://appris.bioinfo.cnio.es/#/downloads
+* Genomic VCF: https://hgdownload.soe.ucsc.edu/gbdb/hg38/platinumGenomes/
