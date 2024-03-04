@@ -1,5 +1,5 @@
 
-# Allele specific m6A RNA modification analysis 
+# Allele-specific m6A RNA modification analysis 
 
 This tool facilitates allele-specific m6A RNA modification (ASM) analysis by identifying differential modification levels across alleles with Oxford Nanopore direct RNA sequencing. Aligned long-reads are allocated to their respective alleles using our Python script, while m6A modification levels are quantified with [m6Anet](https://m6anet.readthedocs.io/en/latest/), a recent supervised machine learning model from Goke lab designed for precise m6A detection. Subsequently, the data from each allele read group are analyzed to assess ASM using an R script designed for this purpose. This integrated approach offers a comprehensive solution for ASM analysis, available in this repository.
 
@@ -81,4 +81,5 @@ m6anet inference --input_dir dataprep/ --out_dir m6Anet_output/ --n_processes 10
 ASM were assessed through bootstrapping strategy based on R. 
 
 ## Reference files 
-In this analysis, we utilized modified transcriptome references. Heterogeneous SNPs, as identified in the VCF file, were either masked with 'N' (resulting in an N-masked transcriptome) or substituted with the corresponding SNP from either the alternative or reference allele (resulting in masked_alt_transcriptome and masked_ref_transcriptome, respectively). These modifications were facilitated by custom Python scripts, which were developed based on the methodology outlined in the published paper by [Ozadam et al, 2023](https://www.nature.com/articles/s41586-023-06228-9). These scripts can be found in the reference directory of this repository.
+In our analysis, we employed modified transcriptome references alongside a transcriptomic VCF. The VCF identified heterogeneous SNPs that were either obscured with 'N' to create an N-masked transcriptome or replaced with allele-specific SNPs from either the alternative or reference allele, leading to the creation of masked_alt_transcriptome and masked_ref_transcriptome, respectively. The process of generating these modifications, including the transcriptomic VCF, was carried out using custom Python scripts inspired by the methods described in the study by
+[Ozadam et al, 2023](https://www.nature.com/articles/s41586-023-06228-9). These scripts are available in the reference directory of our repository.
