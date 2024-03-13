@@ -3,7 +3,8 @@
 
 This tool facilitates allele-specific m6A RNA modification (ASM) analysis by identifying differential modification levels across alleles with Oxford Nanopore direct RNA sequencing. Aligned long-reads are allocated to their respective alleles using our Python script, while m6A modification levels are quantified with [m6Anet](https://m6anet.readthedocs.io/en/latest/), a recent supervised machine learning model from Goke lab designed for precise m6A detection. Subsequently, the data from each allele read group are analyzed to assess ASM using an R script designed for this purpose. This integrated approach offers a comprehensive solution for ASM analysis, available in this repository.
 
-![github_scheme](https://github.com/DayeaPark/Allele-specific-m6A-modification/assets/99752377/aa39b0f8-e6bc-45d4-8dca-c160e8aa6196)
+![github_scheme](https://github.com/DayeaPark/Allele-specific-m6A-modification/assets/99752377/6f693845-44c1-49e7-a11c-650527641a02)
+
 
 ## Contents 
 * Installation 
