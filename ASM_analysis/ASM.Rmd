@@ -1,8 +1,7 @@
 ---
-title: "QC"
+title: "ASM_analysis"
 author: "DP"
-date: "2023-09-07"
-output: html_document
+date: "2024-03-13"
 ---
 
 ## Load packages 
@@ -29,11 +28,6 @@ m6Anet_all_rep2 = read.csv("./m6Anet_output/mESC_rep2_all.csv.gz", header = TRUE
 m6Anet_alt_rep2 = read.csv("./m6Anet_output/mESC_rep2_alt.csv.gz", header = TRUE, sep = ",")
 m6Anet_ref_rep2 = read.csv("./m6Anet_output/mESC_rep2_ref.csv.gz", header = TRUE, sep = ",")
 m6Anet_und_rep2 = read.csv("./m6Anet_output/mESC_rep2_und.csv.gz", header = TRUE, sep = ",")
-
-m6Anet_alt_masked_rep1 = read.csv("./m6Anet_output/masked_mESC_rep1_alt.csv.gz", header = TRUE, sep = ",")
-m6Anet_ref_masked_rep1 = read.csv("./m6Anet_output/masked_mESC_rep1_ref.csv.gz", header = TRUE, sep = ",")
-m6Anet_alt_masked_rep2 = read.csv("./m6Anet_output/masked_mESC_rep2_alt.csv.gz", header = TRUE, sep = ",")
-m6Anet_ref_masked_rep2 = read.csv("./m6Anet_output/masked_mESC_rep2_ref.csv.gz", header = TRUE, sep = ",")
 
 ## Load vcf file
 rename_default <- function(names){
@@ -91,10 +85,10 @@ make_merge_file_with_prob_filter <- function(all, alt, ref, und, probability = 0
 }
 
 prob85_merge_rep1 = make_merge_file_with_prob_filter(m6Anet_all_rep1, m6Anet_alt_rep1, m6Anet_ref_rep1, m6Anet_und_rep1)
-prob85_merge_masked_rep1 = make_merge_file_with_prob_filter(m6Anet_all_rep1, m6Anet_alt_masked_rep1, m6Anet_ref_masked_rep1, m6Anet_und_rep1)
+
 
 prob85_merge_rep2 = make_merge_file_with_prob_filter(m6Anet_all_rep2, m6Anet_alt_rep2, m6Anet_ref_rep2, m6Anet_und_rep2)
-prob85_merge_masked_rep2 = make_merge_file_with_prob_filter(m6Anet_all_rep2, m6Anet_alt_masked_rep2, m6Anet_ref_masked_rep2, m6Anet_und_rep2)
+
 ```
 ## 2. Data process for ASM analysis - excluding DRACH to non-DRACH conversion 
 ```{r}
@@ -128,7 +122,6 @@ SNP_included_m6A_rep2  = SNP_finder_drach(prob85_merge_rep2)
 
 ## Step 2: DRACH nucleotide check
 #In this section, I will identify SNPs that do not shape in the DRACH motif (noDRACH > DRACH or DRACH > noDRACH). 
-#Consequently, the identified m6A sites remain unmodified according to the unmasked m6Anet output. I will exclude these cases from consideration.
 
 DRACH_both_allele <- function(df) {
   D = c("A", "G", "T")
