@@ -1,0 +1,804 @@
+---
+title: "Human (NA12878) ASM QC"
+author: "DP"
+date: "2024-01-16"
+output: html_document
+---
+# Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+library("data.table")
+
+# packages for plot 
+library("ggplot2")
+library("ggpubr")
+library("pheatmap")
+library("gridExtra")
+library("grid")
+library("cowplot")
+require("ggseqlogo")
+library("ggrepel")
+
+
+## Default renaming
+rename_default <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[6])
+}
+
+```
+
+# Load data
+```{r}
+# Reference: maternal / Alternative: paternal reads 
+## mESC_rep1_max
+NA12878_JHU_all = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/JHU_all.csv.gz", header = TRUE, sep = ",")
+NA12878_JHU_alt = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_JHU_alt.csv.gz", header = TRUE, sep = ",")
+NA12878_JHU_ref = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_JHU_ref.csv.gz", header = TRUE, sep = ",")
+NA12878_JHU_und = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_JHU_und.csv.gz", header = TRUE, sep = ",")
+
+NA12878_OICR_all = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/OICR_all.csv.gz", header = TRUE, sep = ",")
+NA12878_OICR_alt = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_OICR_alt.csv.gz", header = TRUE, sep = ",")
+NA12878_OICR_ref = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_OICR_ref.csv.gz", header = TRUE, sep = ",")
+NA12878_OICR_und = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_OICR_und.csv.gz", header = TRUE, sep = ",")
+
+NA12878_UBC_all = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/UBC_all.csv.gz", header = TRUE, sep = ",")
+NA12878_UBC_alt = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UBC_alt.csv.gz", header = TRUE, sep = ",")
+NA12878_UBC_ref = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UBC_ref.csv.gz", header = TRUE, sep = ",")
+NA12878_UBC_und = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UBC_und.csv.gz", header = TRUE, sep = ",")
+
+NA12878_UCSC_all = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/UCSC_all.csv.gz", header = TRUE, sep = ",")
+NA12878_UCSC_alt = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UCSC_alt.csv.gz", header = TRUE, sep = ",")
+NA12878_UCSC_ref = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UCSC_ref.csv.gz", header = TRUE, sep = ",")
+NA12878_UCSC_und = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UCSC_und.csv.gz", header = TRUE, sep = ",")
+
+
+NA12878_UN_all = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/UN_all.csv.gz", header = TRUE, sep = ",")
+NA12878_UN_alt = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UN_alt.csv.gz", header = TRUE, sep = ",")
+NA12878_UN_ref = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UN_ref.csv.gz", header = TRUE, sep = ",")
+NA12878_UN_und = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/m6Anet_output_human/snp0_thredhold7_UN_und.csv.gz", header = TRUE, sep = ",")
+
+```
+
+### Fig 6A - allelic read counts 
+```{r}
+prob85_NA12878 = data.frame( 
+              read = c("alternative", "reference", "undefined"),
+              JHU = c(987,987,987),
+              OICR = c(2979,2979,2979),
+              UBC = c(4355,4355, 4355 ),
+              UCSC = c(4635, 4635, 4635),
+              UN = c(3946, 3946,3946)
+              )
+
+## From prob filter from Line 211
+#dim(JHU_prob85)
+#dim(OICR_prob85)
+#dim(UBC_prob85)
+#dim(UCSC_prob85)
+#dim(UN_prob85)
+
+read_df = melt(allelic_read_NA12878[c(2:4),])
+m6A_all_df = melt(m6Asite_table_snp0[c(2:4),])
+m6A_select_df = melt(prob85_NA12878)
+
+read_df$type = "read"
+m6A_all_df$type = "m6A_all"
+m6A_select_df$type = "m6A_select"
+
+colnames(read_df) = colnames(m6A_all_df) = colnames(m6A_select_df) = c("allelic_read", "sample", "count", "type")
+merge_count_Na12878 = rbind(read_df,m6A_all_df, m6A_select_df)
+
+
+Na12878_line_plot_fig4A <-function (sample_select)  {
+ggplot(merge_count_Na12878[merge_count_Na12878$sample == sample_select, ],
+       aes(x = reorder(type, -count), y = log(count,10), group = allelic_read, color = allelic_read) ) + 
+  geom_line(alpha=0.5) +
+  geom_point(aes(shape = allelic_read), size = 5, alpha=0.6) +  
+  theme_classic() + 
+  scale_y_continuous(limits = c(2.8,5.5) ) +
+  scale_color_manual(values=c( "royalblue3", "darkorange2", "#999999"))+
+  scale_shape_manual(values=c(3, 16, 17))
+}
+
+p_JHU <- Na12878_line_plot_fig4A("JHU")
+p_OICR <- Na12878_line_plot_fig4A("OICR")
+p_UBC <- Na12878_line_plot_fig4A("UBC")
+p_UCSC <- Na12878_line_plot_fig4A("UCSC")
+p_UN <- Na12878_line_plot_fig4A("UN")
+
+ggarrange(p_JHU, p_OICR, p_UBC,p_UCSC,p_UN ,ncol =1)
+```
+
+
+# Reframe data table 
+```{r}
+## I added gene names and extracted column which has position, n_read, prob_ratio, kmer and mod_ratio. 
+reframe_m6Anet <- function (df) {
+  df$gene = sapply(df$transcript_id, rename_default)
+  column_select = c("gene", "transcript_position", "n_reads", "probability_modified", "mod_ratio"  )
+  return(df[,column_select])
+}
+
+make_merge_file <- function(df_all, df_alt, df_ref, df_und) {
+  
+  df_all_new = reframe_m6Anet(df_all)
+  df_alt_new = reframe_m6Anet(df_alt)
+  df_ref_new = reframe_m6Anet(df_ref)
+  df_und_new = reframe_m6Anet(df_und)
+  
+  merge_df1 = merge(df_all_new, df_alt_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  merge_df2 = merge(merge_df1, df_ref_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  new_merge_df = merge(merge_df2, df_und_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  
+  colnames( new_merge_df) = c("gene", "transcript_position",
+                              "all_n_reads", "all_prob_mod", "all_mod_ratio",
+                              "alt_n_reads", "alt_prob_mod", "alt_mod_ratio",
+                              "ref_n_reads", "ref_prob_mod", "ref_mod_ratio",
+                              "und_n_reads", "und_prob_mod", "und_mod_ratio")
+
+  return(new_merge_df)
+}
+
+JHU_merge = make_merge_file(NA12878_JHU_all, NA12878_JHU_alt, NA12878_JHU_ref, NA12878_JHU_und)
+OICR_merge = make_merge_file(NA12878_OICR_all, NA12878_OICR_alt, NA12878_OICR_ref, NA12878_OICR_und)
+UBC_merge = make_merge_file(NA12878_UBC_all, NA12878_UBC_alt, NA12878_UBC_ref, NA12878_UBC_und)
+UCSC_merge = make_merge_file(NA12878_UCSC_all, NA12878_UCSC_alt, NA12878_UCSC_ref, NA12878_UCSC_und)
+UN_merge = make_merge_file(NA12878_UN_all, NA12878_UN_alt, NA12878_UN_ref, NA12878_UN_und)
+```
+
+## Probability filter
+```{r}
+human_vcf = read.csv("/Users/dayeapark/Desktop/Script_upload/NA12878_datasets/NA12878_reference/NA12878_transcript_vcf.csv.gz", header = FALSE, sep = "\t" )
+colnames(human_vcf) = c("transcript_id", "transcript_pos","ALT", "REF")
+human_vcf$gene = sapply(human_vcf$transcript_id, rename_default)
+
+prob_filter  <-function (df_nofilter, prob_threshold) { 
+  df_nofilter[is.na(df_nofilter)] <- 0
+  df = df_nofilter[df_nofilter$all_prob_mod > prob_threshold, ]
+  df$Gene = paste0(df$gene, "_", df$transcript_position)
+  df$n_read_dif = df$all_n_reads - (df$alt_n_reads + df$ref_n_reads + df$und_n_reads)
+  return(df)
+  }
+
+JHU_prob85 = prob_filter(JHU_merge, 0.85)
+OICR_prob85 = prob_filter(OICR_merge, 0.85)
+UBC_prob85 = prob_filter(UBC_merge, 0.85)
+UCSC_prob85 = prob_filter(UCSC_merge, 0.85)
+UN_prob85 = prob_filter(UN_merge, 0.85)
+
+```
+
+################# ASM analysis ##################
+## Group1: SNP finder 
+### SNP on motif sites were selected from masked all m6Anet output. 
+### all, alt, ref, und data frames were merged to all dataset. 
+
+```{r}
+SNP_mark <- function(df, pos_num, mark) {
+  df$transcript_pos = df$transcript_position + pos_num
+  site_mark <- merge(human_vcf, df, by = c("gene", "transcript_pos"))
+  
+  if (nrow(site_mark) > 0 ) { site_mark$SNP_pos = mark}
+  
+  return(site_mark)
+}
+
+
+SNP_finder_drach <- function(df) { 
+    SNP_find_df = rbind(SNP_mark(df, (-1), "D_site"),
+                        SNP_mark(df, 0, "R_site"),
+                        SNP_mark(df, 1, "A_site"),
+                        SNP_mark(df, 2, "C_site"),
+                        SNP_mark(df, 3, "H_site") )
+    SNP_find_df$Gene = paste0(SNP_find_df$gene, "_", SNP_find_df$transcript_position)
+    return(SNP_find_df) 
+}
+
+SNP_dependent_JHU  = SNP_finder_drach(JHU_prob85)
+SNP_dependent_OICR  = SNP_finder_drach(OICR_prob85)
+SNP_dependent_UBC  = SNP_finder_drach(UBC_prob85)
+SNP_dependent_UCSC  = SNP_finder_drach(UCSC_prob85)
+SNP_dependent_UN  = SNP_finder_drach(UN_prob85)
+
+dim(SNP_dependent_JHU)        # 5 sites
+dim(SNP_dependent_OICR)       # 11 sites
+dim(SNP_dependent_UBC)        # 21 sites
+dim(SNP_dependent_UCSC)       # 24 sites
+dim(SNP_dependent_UN)         # 22 sites
+```
+## Step 2: DRACH nucleotide check
+#In this section, I will identify SNPs that do not shape in the DRACH motif (noDRACH > DRACH or DRACH > noDRACH). 
+#Consequently, the identified m6A sites remain unmodified according to the unmasked m6Anet output. I will exclude these cases from consideration.
+```{r}
+DRACH_both_allele <- function(df) {
+  D = c("A", "G", "T")
+  R = c("A", "G")
+  A = c("A")
+  H = c("A", "C", "T")
+  
+  Dsite = df[df$SNP_pos == "D_site",]
+  Rsite = df[df$SNP_pos == "R_site",]
+  Asite = df[df$SNP_pos == "A_site",]
+  Hsite = df[df$SNP_pos == "H_site",]
+  
+  Dsite_DRACH = Dsite[Dsite$ALT %in% D & Dsite$REF %in% D, ]
+  Rsite_DRACH = Rsite[Rsite$ALT %in% R & Rsite$REF %in% R, ]
+  Hsite_DRACH = Hsite[Hsite$ALT %in% H & Hsite$REF %in% H, ]
+  DRACH = rbind(Dsite_DRACH, Rsite_DRACH, Hsite_DRACH)
+  
+  DRACH[is.na(DRACH)] <- 0
+  DRACH_select = DRACH[DRACH$alt_mod_ratio + DRACH$ref_mod_ratio > 0,]
+  return(DRACH_select)
+}
+
+both_DRACH_JHU = DRACH_both_allele(SNP_dependent_JHU)     # 1 sites 
+both_DRACH_OICR = DRACH_both_allele(SNP_dependent_OICR)   # 1 sites
+both_DRACH_UBC = DRACH_both_allele(SNP_dependent_UBC)     # 1 sites
+both_DRACH_UCSC = DRACH_both_allele(SNP_dependent_UCSC)   # 2 sites
+both_DRACH_UN = DRACH_both_allele(SNP_dependent_UN)       # 2 sites  
+
+```
+############################################ SNP-independent ASM ##################################################
+## prepare merge file for filter steps 
+```{r}
+JHU_prob85_preset = rbind(JHU_prob85[!(JHU_prob85$Gene %in% SNP_dependent_JHU$Gene) , ], JHU_prob85[JHU_prob85$Gene %in% both_DRACH_JHU$Gene , ])
+OICR_prob85_preset = rbind(OICR_prob85[!(OICR_prob85$Gene %in% SNP_dependent_OICR$Gene) , ], OICR_prob85[OICR_prob85$Gene %in% both_DRACH_OICR$Gene , ])
+UBC_prob85_preset = rbind(UBC_prob85[!(UBC_prob85$Gene %in% SNP_dependent_UBC$Gene) , ], UBC_prob85[UBC_prob85$Gene %in% both_DRACH_UBC$Gene , ])
+UCSC_prob85_preset = rbind(UCSC_prob85[!(UCSC_prob85$Gene %in% SNP_dependent_UCSC$Gene) , ], UCSC_prob85[UCSC_prob85$Gene %in% both_DRACH_UCSC$Gene , ])
+UN_prob85_preset = rbind(UN_prob85[!(UN_prob85$Gene %in% SNP_dependent_UN$Gene) , ], UN_prob85[UN_prob85$Gene %in% both_DRACH_UN$Gene , ])
+
+```
+
+
+### [PART1] Filter 1 and 2 
+*Filter 1: transcripts in vcf files 
+*Filter 2: alt n_read > 19 & ref n_read > 19
+## Filter 1 (100% of total sites)
+```{r}
+## Filter 1 (100% of total sites)
+
+part1_filter1 <-function (df_merge) { 
+  df_merge[is.na(df_merge)] <- 0
+  df_merge$Gene = paste0(df_merge$gene, "_", df_merge$transcript_position)
+  df_merge_filter1 = df_merge[df_merge$gene %in% human_vcf$gene, ]
+  return (df_merge)
+}
+
+part1_JHU_filter1 <- part1_filter1(JHU_prob85_preset)
+part1_OICR_filter1 <- part1_filter1(OICR_prob85_preset)
+part1_UBC_filter1 <- part1_filter1(UBC_prob85_preset)
+part1_UCSC_filter1 <- part1_filter1(UCSC_prob85_preset)
+part1_UN_filter1 <- part1_filter1(UN_prob85_preset)
+
+dim(part1_JHU_filter1)    # 987
+dim(part1_OICR_filter1)   # 2979
+dim(part1_UBC_filter1)    # 4355
+dim(part1_UCSC_filter1)   # 4635
+dim(part1_UN_filter1)     # 3946
+
+hist(part1_JHU_filter1$n_read_dif, breaks = 50)
+hist(part1_OICR_filter1$n_read_dif, breaks = 50)
+hist(part1_UBC_filter1$n_read_dif, breaks = 50)
+hist(part1_UCSC_filter1$n_read_dif, breaks = 50)
+hist(part1_UN_filter1$n_read_dif, breaks = 50)
+
+```
+
+
+## Filter 2 
+```{r}
+part1_JHU_filter2 = part1_JHU_filter1[part1_JHU_filter1$ref_n_reads > 19 & part1_JHU_filter1$alt_n_reads > 19, ]
+part1_OICR_filter2 = part1_OICR_filter1[part1_OICR_filter1$ref_n_reads > 19 & part1_OICR_filter1$alt_n_reads > 19, ]
+part1_UBC_filter2 = part1_UBC_filter1[part1_UBC_filter1$ref_n_reads > 19 & part1_UBC_filter1$alt_n_reads > 19, ]
+part1_UCSC_filter2 = part1_UCSC_filter1[part1_UCSC_filter1$ref_n_reads > 19 & part1_UCSC_filter1$alt_n_reads > 19, ]
+part1_UN_filter2 = part1_UN_filter1[part1_UN_filter1$ref_n_reads > 19 & part1_UN_filter1$alt_n_reads > 19, ]
+
+dim(part1_JHU_filter2)      # 92/987 (9.4% of group2 subset)
+dim(part1_OICR_filter2)     # 519/2979 (17% of group2 subset)
+dim(part1_UBC_filter2)      # 782/4355 (18% of group2 subset)
+dim(part1_UCSC_filter2)     # 887/4635 (19% of group2 subset)
+dim(part1_UN_filter2)       # 674/3946 (17% of group2 subset)
+
+## Filter 2 out (for part2)
+part1_JHU_filter2_out = part1_JHU_filter1[!(part1_JHU_filter1$ref_n_reads > 19 & part1_JHU_filter1$alt_n_reads > 19), ]
+part1_OICR_filter2_out = part1_OICR_filter1[!(part1_OICR_filter1$ref_n_reads > 19 & part1_OICR_filter1$alt_n_reads > 19), ]
+part1_UBC_filter2_out = part1_UBC_filter1[!(part1_UBC_filter1$ref_n_reads > 19 & part1_UBC_filter1$alt_n_reads > 19), ]
+part1_UCSC_filter2_out = part1_UCSC_filter1[!(part1_UCSC_filter1$ref_n_reads > 19 & part1_UCSC_filter1$alt_n_reads > 19), ]
+part1_UN_filter2_out = part1_UN_filter1[!(part1_UN_filter1$ref_n_reads > 19 & part1_UN_filter1$alt_n_reads > 19), ]
+
+dim(part1_JHU_filter2_out)      
+dim(part1_OICR_filter2_out)     
+dim(part1_UBC_filter2_out)      
+dim(part1_UCSC_filter2_out)     
+dim(part1_UN_filter2_out)       
+
+```
+
+### [PART2] Re-calcualtion for the other 60%  
+* Filter 3: (alt n_read + ref n_read) > 0
+* Recalculate mod_ratio 
+alt mod ratio =  ((all n_read ∗ all mod ratio) -(ref n_read ∗ ref mod ratio"))/ alt n_read
+ref mod ratio =  ((all n_read ∗ all mod ratio) -(alt n_read ∗ alt mod ratio"))/ ref n_read
+* Filter 4:  n_read difference > 10
+```{r}
+## Filter 3: (alt n_read + ref n_read) > 0
+part2_JHU_filter3 = data.table(part1_JHU_filter2_out[(part1_JHU_filter2_out$alt_n_reads + part1_JHU_filter2_out$ref_n_reads) > 0, ])
+part2_OICR_filter3 = data.table(part1_OICR_filter2_out[(part1_OICR_filter2_out$alt_n_reads + part1_OICR_filter2_out$ref_n_reads) > 0, ])
+part2_UBC_filter3 = data.table(part1_UBC_filter2_out[(part1_UBC_filter2_out$alt_n_reads + part1_UBC_filter2_out$ref_n_reads) > 0, ])
+part2_UCSC_filter3 = data.table(part1_UCSC_filter2_out[(part1_UCSC_filter2_out$alt_n_reads + part1_UCSC_filter2_out$ref_n_reads) > 0, ])
+part2_UN_filter3 = data.table(part1_UN_filter2_out[(part1_UN_filter2_out$alt_n_reads + part1_UN_filter2_out$ref_n_reads) > 0, ])
+
+dim(part2_JHU_filter3)    # 112/987
+dim(part2_OICR_filter3)   # 305/2979
+dim(part2_UBC_filter3)    # 514/4355
+dim(part2_UCSC_filter3)   # 553/4635
+dim(part2_UN_filter3)     # 443/3946
+
+## Recount mod ratio 
+## 1) alt and ref n_read were filled with n_read differences. 
+## 2) if undefined read has modification ratio, I included und_mod_ratio for calculation. However, if und_n_read is zero, I ignore the effects of undefined reads. 
+## As a result, recounted mod ratio is not over 1. 
+
+recount_mod_ratio_part2 <- function (df_part2_post_filer2) {
+  df_part2_post_filer =  df_part2_post_filer2[df_part2_post_filer2$n_read_dif > 0, ]
+    for (i in 1:nrow(df_part2_post_filer)) {
+      if (df_part2_post_filer$alt_n_reads[i] == 0 ) {
+        df_part2_post_filer$alt_n_reads[i] <- df_part2_post_filer$n_read_dif[i]
+        
+        if (df_part2_post_filer$und_n_reads[i] > 0 ) {
+          df_part2_post_filer$alt_mod_ratio[i] = ((df_part2_post_filer$all_n_reads[i] * df_part2_post_filer$all_mod_ratio[i]) - (df_part2_post_filer$ref_n_reads[i] * df_part2_post_filer$ref_mod_ratio[i]) - (df_part2_post_filer$und_n_reads[i] * df_part2_post_filer$und_mod_ratio[i]))/df_part2_post_filer$alt_n_reads[i]  
+        } else if (df_part2_post_filer$und_n_reads[i] == 0 )
+          df_part2_post_filer$alt_mod_ratio[i] = ((df_part2_post_filer$all_n_reads[i] * df_part2_post_filer$all_mod_ratio[i]) - (df_part2_post_filer$ref_n_reads[i] * df_part2_post_filer$ref_mod_ratio[i]) )/df_part2_post_filer$alt_n_reads[i]
+          
+      } else if (df_part2_post_filer$ref_n_reads[i] == 0 ) {
+        df_part2_post_filer$ref_n_reads[i] <- df_part2_post_filer$n_read_dif[i]
+       
+        if (df_part2_post_filer$und_n_reads[i] > 0 ) {
+         df_part2_post_filer$ref_mod_ratio[i] = ((df_part2_post_filer$all_n_reads[i] * df_part2_post_filer$all_mod_ratio[i]) - (df_part2_post_filer$alt_n_reads[i] * df_part2_post_filer$alt_mod_ratio[i]) - (df_part2_post_filer$und_n_reads[i] * df_part2_post_filer$und_mod_ratio[i] ))/df_part2_post_filer$ref_n_reads[i]
+       } else if (df_part2_post_filer$und_n_reads[i] == 0 ) {
+         df_part2_post_filer$ref_mod_ratio[i] = ((df_part2_post_filer$all_n_reads[i] * df_part2_post_filer$all_mod_ratio[i]) - (df_part2_post_filer$alt_n_reads[i] * df_part2_post_filer$alt_mod_ratio[i]) )/df_part2_post_filer$ref_n_reads[i]
+       }}
+    }
+      return(df_part2_post_filer)
+}
+
+## rep1 and rep2 recount. 
+## It takes a long time. I recommend you to use the saved file. 
+
+part2_JHU_filter3_recount = recount_mod_ratio_part2(part2_JHU_filter3) 
+part2_OICR_filter3_recount = recount_mod_ratio_part2(part2_OICR_filter3) 
+part2_UBC_filter3_recount = recount_mod_ratio_part2(part2_UBC_filter3) 
+part2_UCSC_filter3_recount = recount_mod_ratio_part2(part2_UCSC_filter3) 
+part2_UN_filter3_recount = recount_mod_ratio_part2(part2_UN_filter3) 
+
+
+## Filter 4: n_read difference > 10
+# I keep m6A sites which n_read differences are over 10
+N_dif_threshold = 10
+part2_JHU_filter4 = part2_JHU_filter3_recount[part2_JHU_filter3_recount$n_read_dif > N_dif_threshold , ]
+part2_OICR_filter4 = part2_OICR_filter3_recount[part2_OICR_filter3_recount$n_read_dif > N_dif_threshold , ]
+part2_UBC_filter4 = part2_UBC_filter3_recount[part2_UBC_filter3_recount$n_read_dif > N_dif_threshold , ]
+part2_UCSC_filter4 = part2_UCSC_filter3_recount[part2_UCSC_filter3_recount$n_read_dif > N_dif_threshold , ]
+part2_UN_filter4 = part2_UN_filter3_recount[part2_UN_filter3_recount$n_read_dif > N_dif_threshold , ]
+
+
+dim(part2_JHU_filter4)    
+dim(part2_OICR_filter4)   
+dim(part2_UBC_filter4)    
+dim(part2_UCSC_filter4)   
+dim(part2_UN_filter4)     
+
+```
+
+## Merge part1 and part2 
+```{r}
+## I combined part1 and part2 data tables. 
+
+JHU_part1_part2 = rbind(part1_JHU_filter2, part2_JHU_filter4)
+OICR_part1_part2 = rbind(part1_OICR_filter2, part2_OICR_filter4)
+UBC_part1_part2 = rbind(part1_UBC_filter2, part2_UBC_filter4)
+UCSC_part1_part2 = rbind(part1_UCSC_filter2, part2_UCSC_filter4)
+UCSC_part1_part2 = rbind(part1_UCSC_filter2, part2_UCSC_filter4)
+UN_part1_part2 = rbind(part1_UN_filter2, part2_UN_filter4)
+
+dim(JHU_part1_part2)    # 194  
+dim(OICR_part1_part2)   # 781
+dim(UBC_part1_part2)    # 1231
+dim(UCSC_part1_part2)   # 1366
+dim(UN_part1_part2)     # 1071
+
+
+```
+
+## allele specific methylation (histogram)
+```{r}
+hist(JHU_part1_part2$ref_mod_ratio - JHU_part1_part2$alt_mod_ratio, breaks = 50)
+hist(OICR_part1_part2$ref_mod_ratio - OICR_part1_part2$alt_mod_ratio, breaks = 50)
+hist(UBC_part1_part2$ref_mod_ratio - UBC_part1_part2$alt_mod_ratio, breaks = 50)
+hist(UCSC_part1_part2$ref_mod_ratio - UCSC_part1_part2$alt_mod_ratio, breaks = 50)
+hist(UN_part1_part2$ref_mod_ratio - UN_part1_part2$alt_mod_ratio, breaks = 50)
+
+```
+
+############### ASM analysis ###############  
+
+### Bootsrap function
+```{r}
+## Detailed SNP information reframe 
+reframe_for_bootstrap <- function (m6A_df , prob_threshold) { 
+    colnames(m6A_df) = c( "gene", "transcript_position", 
+                              "all_n_reads", "all_prob_mod", "all_mod_ratio", 
+                              "alt_n_reads", "alt_prob_mod", "alt_mod_ratio",
+                              "ref_n_reads", "ref_prob_mod", "ref_mod_ratio",
+                              "und_n_reads", "und_prob_mod", "und_mod_ratio")
+    
+    m6A_allele  = m6A_df[m6A_df$all_prob_mod > prob_threshold,]
+    m6A_allele$Gene = paste0(m6A_allele$gene, "_", m6A_allele$transcript_position)
+    
+    m6A_allele$alt_methylated = m6A_allele$alt_n_reads * m6A_allele$alt_mod_ratio
+    m6A_allele$ref_methylated = m6A_allele$ref_n_reads * m6A_allele$ref_mod_ratio
+ 
+    m6A_allele_count = m6A_allele[,c("Gene", "alt_n_reads", "alt_methylated", "alt_mod_ratio","ref_n_reads", "ref_methylated", "ref_mod_ratio")]
+    return(m6A_allele_count)
+}
+
+### function to search for p-value after bootsrapping on m6A site. 
+p_value_of_each_site <- function ( df_all, sample_n, effect_size_threshold) {
+  
+    df_modcount  = reframe_for_bootstrap(df_all[,c(1:14)], 0.85)
+    
+    for(i in 1:nrow(df_modcount)) {
+      if (df_modcount$alt_n_reads[i] > 0 & df_modcount$ref_n_reads[i] > 0 ) {
+        methylated_alt = c(rep(1,df_modcount$alt_methylated[i]), rep(0,df_modcount$alt_n_reads[i] - df_modcount$alt_methylated[i]))
+        methylated_ref = c(rep(1,df_modcount$ref_methylated[i]), rep(0,df_modcount$ref_n_reads[i] - df_modcount$ref_methylated[i]))
+        
+        alt_bootstrap = colSums(replicate(sample(methylated_alt, length(methylated_alt), replace = TRUE), n = sample_n ))/length(methylated_alt)
+        ref_bootstrap = colSums(replicate(sample(methylated_ref, length(methylated_ref), replace = TRUE), n = sample_n ))/length(methylated_ref)
+        
+        pvalue_ref_high = 1- sum((ref_bootstrap - alt_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+        pvalue_alt_high = 1- sum((alt_bootstrap - ref_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+        
+        df_modcount$pvalue_ref[i] <- pvalue_ref_high
+        df_modcount$pvalue_alt[i] <- pvalue_alt_high
+        
+      } else if (df_modcount$alt_n_reads[i] == 0 | df_modcount$ref_n_reads[i] == 0 ) {
+        print("zero read count found!")
+        df_modcount$pvalue_ref[i] = "none"
+        df_modcount$pvalue_alt[i] = "none" }
+    }
+    
+return(df_modcount[,c("Gene","alt_mod_ratio","ref_mod_ratio", "pvalue_ref", "pvalue_alt")])
+}
+
+ p_value_bias <- function (df_p_value) { 
+    for (i in 1:nrow (df_p_value)) { 
+      if(df_p_value$alt_mod_ratio[i] >= df_p_value$ref_mod_ratio[i]) { 
+        df_p_value$bias_pvalue[i] <- df_p_value$pvalue_alt[i]
+      } else if(df_p_value$alt_mod_ratio[i] < df_p_value$ref_mod_ratio[i]) { 
+        df_p_value$bias_pvalue[i] <- df_p_value$pvalue_ref[i]}
+      }
+   return(df_p_value[,c(1:3,6)])
+    }
+
+ 
+
+```
+
+### make p-value of individule sample. 
+```{r}
+set.seed(3)
+JHU_pvalue = p_value_of_each_site(JHU_part1_part2, 10000, 0.15)
+OICR_pvalue = p_value_of_each_site(OICR_part1_part2, 10000, 0.15)
+UBC_pvalue = p_value_of_each_site(UBC_part1_part2, 10000, 0.15)
+UCSC_pvalue = p_value_of_each_site(UCSC_part1_part2, 10000, 0.15)
+UN_pvalue = p_value_of_each_site(UN_part1_part2, 10000, 0.15)
+
+JHU_bias_pvalue = p_value_bias(JHU_pvalue)
+OICR_bias_pvalue = p_value_bias(OICR_pvalue)
+UBC_bias_pvalue = p_value_bias(UBC_pvalue)
+UCSC_bias_pvalue = p_value_bias(UCSC_pvalue)
+UN_bias_pvalue = p_value_bias(UN_pvalue)
+
+sum(JHU_bias_pvalue$bias_pvalue < 0.05)    
+sum(OICR_bias_pvalue$bias_pvalue < 0.05)   
+sum(UBC_bias_pvalue$bias_pvalue < 0.05)   
+sum(UCSC_bias_pvalue$bias_pvalue < 0.05)
+sum(UN_bias_pvalue$bias_pvalue < 0.05)
+
+```
+
+
+## PLOT: p-value between two replicates 
+```{r}
+p_value_plot_label <- function (biased_pvale_rep1, biased_pvale_rep2, xlab_plot, ylab_plot) { 
+  merge_bias_p = merge(biased_pvale_rep1 %>% select("Gene", contains("pvalue") ),
+                       biased_pvale_rep2 %>% select("Gene", contains("pvalue") ), by = "Gene", all = TRUE)
+  colnames(merge_bias_p) = c("Gene", "rep1_pvalue", "rep2_pvalue")
+  
+ggplot(merge_bias_p, aes(x= -log(rep1_pvalue,10), y = -log(rep2_pvalue,10)) )+ 
+  geom_point(size = 1.2, shape = 19, alpha = 1/2) +
+  geom_hline(yintercept=-log(0.05, 10), linetype="dashed", color = "red", size=0.2)+
+  geom_vline(xintercept=-log(0.05, 10), linetype="dashed", color = "red", size=0.2) + 
+  theme_classic()+ 
+  theme(legend.position= "none") +
+  xlab(xlab_plot) +
+  ylab(ylab_plot)
+}
+
+ggarrange(p_value_plot_label(JHU_bias_pvalue, OICR_bias_pvalue, "-log(JHU pvalue)", "-log(OICR pvalue)"),
+p_value_plot_label(JHU_bias_pvalue, UBC_bias_pvalue, "-log(JHU pvalue)", "-log(UBC pvalue)"),
+p_value_plot_label(JHU_bias_pvalue, UCSC_bias_pvalue, "-log(JHU pvalue)", "-log(UCSC pvalue)"),
+p_value_plot_label(JHU_bias_pvalue, UN_bias_pvalue, "-log(JHU pvalue)", "-log(UN pvalue)"),
+p_value_plot_label(OICR_bias_pvalue, UBC_bias_pvalue, "-log(OICR pvalue)", "-log(UBC pvalue)"),
+p_value_plot_label(OICR_bias_pvalue, UCSC_bias_pvalue, "-log(OICR pvalue)", "-log(UCSC pvalue)"),
+p_value_plot_label(OICR_bias_pvalue, UN_bias_pvalue, "-log(OICR pvalue)", "-log(UN pvalue)"),
+p_value_plot_label(UBC_bias_pvalue, UCSC_bias_pvalue, "-log(UBC pvalue)", "-log(UCSC pvalue)"),
+p_value_plot_label(UBC_bias_pvalue, UN_bias_pvalue, "-log(UBC pvalue)", "-log(UN pvalue)"),
+p_value_plot_label(UCSC_bias_pvalue, UN_bias_pvalue, "-log(UCSC pvalue)", "-log(UN pvalue)"),
+ncol = 2, nrow = 5)
+
+
+```
+### Merged biased p_value and make harmonic mena p_value 
+```{r}
+## merge all datasets
+#put all data frames into list
+df_list <- list(JHU_bias_pvalue, OICR_bias_pvalue, UBC_bias_pvalue, UCSC_bias_pvalue, UN_bias_pvalue)
+
+#merge all data frames in list
+human_merge_bias_p = df_list %>% reduce(full_join, by='Gene')
+human_merge_bias_pvalue = human_merge_bias_p %>% select(Gene, contains("bias_pvalue"))
+colnames(human_merge_bias_pvalue) = c("Gene", "JHU_pvalue","OICR_pvalue", "UBC_pvalue", "UCSC_pvalue", "UN_pvalue")
+
+
+## harmonic mean p value function 
+harmonic_mean_p_value <- function(merged_p_values) {
+  p_value_noNA = na.omit(merged_p_values)
+  reciprocals <- 1 / p_value_noNA
+  harmonic_mean_p <- length(p_value_noNA) / sum(reciprocals)
+  
+  return(harmonic_mean_p)
+}
+
+## harmonic mean p-value
+
+for( i in 1:nrow(human_merge_bias_pvalue) ) { 
+  p_value_list = c(human_merge_bias_pvalue$JHU_pvalue[i],
+                   human_merge_bias_pvalue$OICR_pvalue[i],
+                   human_merge_bias_pvalue$UBC_pvalue[i],
+                   human_merge_bias_pvalue$UCSC_pvalue[i],
+                   human_merge_bias_pvalue$UN_pvalue[i])
+  human_merge_bias_pvalue$harmonic_p[i] <- harmonic_mean_p_value(p_value_list)
+  
+}
+
+
+## filter number of exsitant p_value. 
+human_harmonic_pvalue_valid <- human_merge_bias_pvalue[rowSums(is.na(human_merge_bias_pvalue) ) < 3, ]
+
+human_harmonic_pvalue_sig_high <- human_harmonic_pvalue_valid[human_harmonic_pvalue_valid$harmonic_p <= 0.01 , ]$Gene
+length(human_harmonic_pvalue_sig_high)  
+
+
+#human_ASM_UCSC <- UCSC_part1_part2[UCSC_part1_part2$Gene %in% human_harmonic_pvalue_sig_high, ]
+#save(human_ASM_UCSC, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/NA12878/human_ASM_UCSC.Rdata")
+
+
+```
+
+### modification ratio difference plot with significant p-valued ASM mark (Figure 6B and suplemenatry Fig 9)
+```{r}
+mod_dif_plot_each_sample <- function (df_part1_part2 , title_plot) { 
+  df_part1_part2$mod_dif = df_part1_part2$ref_mod_ratio - df_part1_part2$alt_mod_ratio
+  plot_df_ASM <- df_part1_part2[,c("gene", "Gene", "ref_mod_ratio", "alt_mod_ratio", "mod_dif")]
+  plot_df_ASM$sig <- "none"
+  plot_df_ASM[plot_df_ASM$Gene %in% human_harmonic_pvalue_sig_high, ]$sig <- "significance"
+
+  ggplot(plot_df_ASM, aes(x= alt_mod_ratio, y = ref_mod_ratio, color = sig)) + 
+  geom_point(size = 1.2, shape = 19, alpha = 1/2) +
+  scale_color_manual(values = c("none" = "lightgrey", "significance" = "darkblue") ) + 
+  theme_classic() + 
+  ggtitle(title_plot) + 
+  geom_text(data=plot_df_ASM[plot_df_ASM$sig == "significance", ], 
+            aes(x = alt_mod_ratio + 0.2, label=gene) ) + 
+  scale_x_continuous(limits = c(0,1)) + 
+  scale_y_continuous(limits = c(0,1)) +
+  theme(legend.position= "none")
+}
+
+ggarrange ( mod_dif_plot_each_sample(JHU_part1_part2, "JHU mod ratio from each allele"),
+mod_dif_plot_each_sample(OICR_part1_part2, "OICR mod ratio from each allele, post-filter 781 sites"),
+mod_dif_plot_each_sample(UBC_part1_part2, "UBC mod ratio from each allele, post-filter 1231 sites"),
+mod_dif_plot_each_sample(UCSC_part1_part2, "UCSC mod ratio from each allele, post-filter 1364 sites"),
+mod_dif_plot_each_sample(UN_part1_part2, "UN mod ratio from each allele, post-filter 1071 sites"),
+ncol = 1, nrow =5)
+
+
+```
+## Fig 6C: alt and ref distribution from bootstrap - three genes 
+## all in one plots
+```{r}
+set.seed(10)
+
+bootstrap_distance_plot_df_gen <- function (df_part1_part2, GOI, sample_n, effect_size_threshold, sample_name1, sample_name2) { 
+    df_GOI <- reframe_for_bootstrap(df_part1_part2[df_part1_part2$Gene == GOI, c(1:14)], 0.85)
+    
+    methylated_alt = c(rep(1,df_GOI$alt_methylated), rep(0,df_GOI$alt_n_reads - df_GOI$alt_methylated))
+    methylated_ref = c(rep(1,df_GOI$ref_methylated), rep(0,df_GOI$ref_n_reads - df_GOI$ref_methylated))
+            
+    alt_bootstrap = colSums(replicate(sample(methylated_alt, length(methylated_alt), replace = TRUE), n = sample_n ))/length(methylated_alt)
+    ref_bootstrap = colSums(replicate(sample(methylated_ref, length(methylated_ref), replace = TRUE), n = sample_n ))/length(methylated_ref)
+    
+    pvalue_ref_high = 1- sum((ref_bootstrap - alt_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+    pvalue_alt_high = 1- sum((alt_bootstrap - ref_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+    
+    plot_df_alt <- data.frame( bootstrap_pop = alt_bootstrap, label = replicate(length(alt_bootstrap), sample_name1))
+    plot_df_ref <- data.frame( bootstrap_pop = ref_bootstrap, label = replicate(length(ref_bootstrap), sample_name2))
+    
+    return(rbind(plot_df_alt, plot_df_ref) )
+}
+
+
+## ASM
+#human_harmonic_pvalue_sig_high
+
+FCMR_density_all_df = rbind(bootstrap_distance_plot_df_gen(JHU_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1, "JHU_alt", "JHU_ref"),
+                      bootstrap_distance_plot_df_gen(OICR_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1, "OICR_alt", "OICR_ref"),
+                      bootstrap_distance_plot_df_gen(UBC_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1, "UBC_alt", "UBC_ref"),
+                      bootstrap_distance_plot_df_gen(UCSC_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1, "UCSC_alt", "UCSC_ref"),
+                      bootstrap_distance_plot_df_gen(UN_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1, "UN_alt", "UN_ref") )
+      
+      
+FCMR_density <- ggplot(FCMR_density_all_df, aes(x=bootstrap_pop, fill = label)) +
+                geom_histogram(position="identity", bins=20, alpha = 0.5) +
+                #geom_density( alpha = 0.3, bw = 0.02) +
+                theme_classic() +
+                theme(legend.position= "top") +
+                scale_fill_manual(values = c("JHU_alt" = "lightblue1", "JHU_ref" = "orange", 
+                                              "OICR_alt" = "skyblue1" , "OICR_ref" = "darkorange",
+                                              "UBC_alt" = "dodgerblue2" , "UBC_ref" = "darkorange2",
+                                              "UCSC_alt" = "dodgerblue3" , "UCSC_ref" = "darkorange3",
+                                              "UN_alt" = "dodgerblue4" , "UN_ref" = "darkorange4") ) +
+              ggtitle("FCMR_1294")
+
+TNFSF9_density_all_df = rbind(bootstrap_distance_plot_df_gen(OICR_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1, "OICR_alt", "OICR_ref"),
+                      bootstrap_distance_plot_df_gen(UBC_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1, "UBC_alt", "UBC_ref"),
+                      bootstrap_distance_plot_df_gen(UCSC_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1, "UCSC_alt", "UCSC_ref"),
+                      bootstrap_distance_plot_df_gen(UN_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1, "UN_alt", "UN_ref") )
+      
+      
+TNFSF9_density <- ggplot(TNFSF9_density_all_df, aes(x=bootstrap_pop, fill = label)) +
+                geom_histogram(position="identity", bins=20, alpha = 0.5) +
+                #geom_density( alpha = 0.3, bw = 0.02) +
+                theme_classic() +
+                theme(legend.position= "top") +
+                scale_fill_manual(values = c("OICR_alt" = "skyblue1" , "OICR_ref" = "darkorange",
+                                              "UBC_alt" = "dodgerblue2" , "UBC_ref" = "darkorange2",
+                                              "UCSC_alt" = "dodgerblue3" , "UCSC_ref" = "darkorange3",
+                                              "UN_alt" = "dodgerblue4" , "UN_ref" = "darkorange4") ) +
+              ggtitle("TNFSF9_803")
+
+BTN3A2_density_all_df = rbind(bootstrap_distance_plot_df_gen(UBC_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1, "UBC_alt", "UBC_ref"),
+                      bootstrap_distance_plot_df_gen(UCSC_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1, "UCSC_alt", "UCSC_ref"),
+                      bootstrap_distance_plot_df_gen(UN_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1, "UN_alt", "UN_ref") )
+      
+     
+
+BTN3A2_density <- ggplot(BTN3A2_density_all_df, aes(x=bootstrap_pop, fill = label)) +
+                geom_histogram(position="identity", bins=12, alpha = 0.5) +
+                #geom_density( alpha = 0.3, bw = 0.02) +
+                theme_classic() +
+                theme(legend.position= "top") +
+                scale_fill_manual(values = c("UBC_alt" = "dodgerblue2" , "UBC_ref" = "darkorange2",
+                                              "UCSC_alt" = "dodgerblue3" , "UCSC_ref" = "darkorange3",
+                                              "UN_alt" = "dodgerblue4" , "UN_ref" = "darkorange4") ) +
+              ggtitle("BTN3A2_3261")
+
+
+ggarrange(FCMR_density, TNFSF9_density, BTN3A2_density, ncol= 3, nrow = 1)
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/Final_main/NA12878_pvaluu_three.pdf", width = 15, height = 4)
+
+```
+## seperate plots (human ASM - Fig 5C revised 07/23/24)
+```{r}
+histogram_human <- function (df, color1, color2 ) { 
+  ggplot(df, aes(x=bootstrap_pop, fill = label)) +
+                geom_histogram(position="identity", bins=12, alpha = 0.8) +
+                #geom_density( alpha = 0.3, bw = 0.02) +
+                theme_classic() +
+                scale_fill_manual(values = c(color1, color2)  ) +
+                theme(legend.position= "none", 
+                      axis.title.x=element_blank(),
+                      axis.title.y=element_blank()) 
+}
+
+seperate_histgram <- function( df ) { 
+  JHU  = df [df$label %in% c("JHU_alt", "JHU_ref"),]
+  OICR  = df [df$label %in% c("OICR_alt", "OICR_ref"),]
+  UBC  = df [df$label %in% c("UBC_alt", "UBC_ref"),]
+  UCSC  = df [df$label %in% c("UCSC_alt", "UCSC_ref"),]
+  UN  = df [df$label %in% c("UN_alt", "UN_ref"),]
+  
+  ggarrange( histogram_human(JHU,"lightblue1", "orange") ,
+            histogram_human(OICR,"skyblue1" ,  "darkorange"),
+            histogram_human(UBC,"dodgerblue2" ,"darkorange2"),
+            histogram_human(UCSC,"dodgerblue3", "darkorange3"),
+            histogram_human(UN,"dodgerblue4" , "darkorange4"),
+            nrow = 5, ncol =1 )
+}
+
+ggarrange(seperate_histgram(FCMR_density_all_df),
+          seperate_histgram(TNFSF9_density_all_df),
+          seperate_histgram(BTN3A2_density_all_df),
+          nrow =1 , ncol = 3)
+```
+
+## all in seperate plots
+```{r}
+set.seed(10)
+
+bootstrap_distance_histogram <- function (df_part1_part2, GOI, sample_n, effect_size_threshold) { 
+    df_GOI <- reframe_for_bootstrap(df_part1_part2[df_part1_part2$Gene == GOI, c(1:14)], 0.85)
+    
+    methylated_alt = c(rep(1,df_GOI$alt_methylated), rep(0,df_GOI$alt_n_reads - df_GOI$alt_methylated))
+    methylated_ref = c(rep(1,df_GOI$ref_methylated), rep(0,df_GOI$ref_n_reads - df_GOI$ref_methylated))
+            
+    alt_bootstrap = colSums(replicate(sample(methylated_alt, length(methylated_alt), replace = TRUE), n = sample_n ))/length(methylated_alt)
+    ref_bootstrap = colSums(replicate(sample(methylated_ref, length(methylated_ref), replace = TRUE), n = sample_n ))/length(methylated_ref)
+    
+    pvalue_ref_high = 1- sum((ref_bootstrap - alt_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+    pvalue_alt_high = 1- sum((alt_bootstrap - ref_bootstrap) > effect_size_threshold) / length(ref_bootstrap-alt_bootstrap)
+    
+    plot_df <- data.frame( alt_bootstrap_pop = alt_bootstrap, ref_bootstrap_pop = ref_bootstrap)
+    plot_melt_df = melt(plot_df)
+    
+    hist <- ggplot(plot_melt_df, aes(x=value, fill=variable)) +
+          geom_histogram(position="identity", bins=15, alpha = 0.6) + 
+          stat_density(geom = "line", aes(colour = variable)) + 
+          stat_function(fun = dnorm, aes(x = z, colour = "blabla")) +
+          theme_classic() +
+          theme(legend.position= "none")
+    
+    print(paste("pvalue ref: ", pvalue_ref_high, "pvalue alt: ",pvalue_alt_high))
+    
+    return(hist) 
+}
+
+
+FCMR_pvale_plot <- annotate_figure(
+  ggarrange( bootstrap_distance_histogram(JHU_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1),
+            bootstrap_distance_histogram(OICR_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1),
+            bootstrap_distance_histogram(UBC_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1),
+            bootstrap_distance_histogram(UCSC_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1),
+            bootstrap_distance_histogram(UN_part1_part2, human_harmonic_pvalue_sig_high[1], 10000, 0.1),
+            ncol =1, nrow = 5), 
+  top = text_grob( "FCMR", color = "red", face = "bold", size = 14) )
+
+TNFSF9_pvale_plot <- annotate_figure(
+ggarrange(NA,
+          bootstrap_distance_histogram(OICR_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1),
+          bootstrap_distance_histogram(UBC_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1),
+          bootstrap_distance_histogram(UCSC_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1),
+          bootstrap_distance_histogram(UN_part1_part2, human_harmonic_pvalue_sig_high[2], 10000, 0.1),
+          ncol =1, nrow = 5), 
+  top = text_grob( "TNFSF9", color = "red", face = "bold", size = 14) )
+
+BTN3A2_pvale_plot <- annotate_figure(
+ggarrange(NA,NA,
+          bootstrap_distance_histogram(UBC_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1),
+          bootstrap_distance_histogram(UCSC_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1),
+          bootstrap_distance_histogram(UN_part1_part2, human_harmonic_pvalue_sig_high[3], 10000, 0.1),
+          ncol =1, nrow = 5), 
+  top = text_grob( "BTN3A2", color = "red", face = "bold", size = 14) )
+
+ggarrange(FCMR_pvale_plot, TNFSF9_pvale_plot, BTN3A2_pvale_plot, ncol= 3, nrow = 1)
+
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/Final_main/NA12878_pvalue_three_sep.pdf", width = 12, height = 9)
+
+```
