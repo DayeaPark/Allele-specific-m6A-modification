@@ -1,0 +1,322 @@
+---
+title: "QC"
+author: "DP"
+date: "2023-09-07"
+---
+## Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+library("palmerpenguins")
+library("data.table")
+
+# packages for plot 
+library("ggplot2")
+library("ggpubr")
+library("ggVennDiagram")
+library("pheatmap")
+library("gridExtra")
+
+```
+
+### raw read count 
+mESC rep1 : 2323186
+mESC rep2 : 2206690
+mESC mettl3 : 728039
+################################################################################
+## Load data (m6anet output)
+```{r}
+# Reference: maternal / Alternative: paternal reads 
+## mESC_rep2_max
+## Max n_read: all (20k), alt (10k), ref (10k), und (12k)
+mESC_all_rep1_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mESC_rep1_all.csv.gz", header = TRUE, sep = ",")
+mESC_alt_ALT_rep1_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_mESC_rep1_alt_ALT.csv.gz", header = TRUE, sep = ",")
+mESC_ref_REF_rep1_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_mESC_rep1_ref_REF.csv.gz", header = TRUE, sep = ",")
+mESC_und_rep1_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mESC_rep1_und.csv.gz", header = TRUE, sep = ",")
+
+## mESC_rep2_max
+## Max n_read: all (15k), alt (10k), ref (10k), und (12k)
+mESC_all_rep2_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mESC_rep2_all.csv.gz", header = TRUE, sep = ",")
+mESC_alt_ALT_rep2_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_mESC_rep2_alt_ALT.csv.gz", header = TRUE, sep = ",")
+mESC_ref_REF_rep2_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_mESC_rep2_ref_REF.csv.gz", header = TRUE, sep = ",")
+mESC_und_rep2_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mESC_rep2_und.csv.gz", header = TRUE, sep = ",")
+
+
+## mettl3
+mettl3_all_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mettl3_all.csv.gz", header = TRUE, sep = ",")
+mettl3_alt_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mettl3_alt.csv.gz", header = TRUE, sep = ",")
+mettl3_ref_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mettl3_ref.csv.gz", header = TRUE, sep = ",")
+mettl3_und_max = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/m6Anet_output/m6Anet_max_mettl3_und.csv.gz", header = TRUE, sep = ",")
+
+```
+## reframe m6Anet output for further analysis 
+```{r}
+reframe_m6Anet <- function (df) {
+  df$gene = sapply(df$transcript_id, rename_default)
+  df_select = df[,c(7,2:6)]
+  return(df_select)
+}
+
+make_merge_file <- function(m6Anet_all, m6Anet_alt, m6Anet_ref, m6Anet_und) {
+  
+  df_all = reframe_m6Anet(m6Anet_all)
+  df_alt = reframe_m6Anet(m6Anet_alt)
+  df_ref = reframe_m6Anet(m6Anet_ref)
+  df_und = reframe_m6Anet(m6Anet_und)
+  
+  column_select = c("gene", "transcript_position", "n_reads", "probability_modified", "mod_ratio"  )
+  df_all_new = df_all[,column_select]
+  df_alt_new = df_alt[,column_select]
+  df_ref_new = df_ref[,column_select]
+  df_und_new = df_und[,column_select]
+  merge_df1 = merge(df_all_new, df_alt_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  merge_df2 = merge(merge_df1, df_ref_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  new_merge_df = merge(merge_df2, df_und_new, by = c("gene", "transcript_position"), all.x = TRUE)
+  
+  colnames( new_merge_df) = c("gene", "transcript_position",
+                              "all_n_reads", "all_prob_mod", "all_mod_ratio",
+                              "alt_n_reads", "alt_prob_mod", "alt_mod_ratio",
+                              "ref_n_reads", "ref_prob_mod", "ref_mod_ratio",
+                              "und_n_reads", "und_prob_mod", "und_mod_ratio")
+  
+  new_merge_df[is.na(new_merge_df)] <- 0
+  
+  new_merge_df$n_read_dif = new_merge_df$all_n_reads - (new_merge_df$alt_n_reads + new_merge_df$ref_n_reads + new_merge_df$und_n_reads)
+
+  return(new_merge_df)
+}
+
+max_rep1_all_alt_ref_und = make_merge_file(mESC_all_rep1_max, mESC_alt_ALT_rep1_max, mESC_ref_REF_rep1_max, mESC_und_rep1_max)
+max_rep2_all_alt_ref_und = make_merge_file(mESC_all_rep2_max, mESC_alt_ALT_rep2_max, mESC_ref_REF_rep2_max, mESC_und_rep1_max)
+max_mettl3_all_alt_ref_und = make_merge_file(mettl3_all_max, mettl3_alt_max, mettl3_ref_max, mettl3_und_max)
+
+#write.csv(max_rep1_all_alt_ref_und, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_rep1_all_alt_ref_und.csv", row.names = FALSE, quote = FALSE)
+#write.csv(max_rep2_all_alt_ref_und, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_rep2_all_alt_ref_und.csv", row.names = FALSE, quote = FALSE)
+#write.csv(max_mettl3_all_alt_ref_und, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_mettl3_all_alt_ref_und.csv", row.names = FALSE, quote = FALSE)
+```
+################################################################################
+
+## I generated annotation file using bedtools. 
+## change comma to tab, and extract columes (transcript name, transcript position, transcript position, probability, mod_ratio )
+## The transcript position has to be duplicated since bedtools intertect need two columns with integral.
+## Then remove the first header column.
+# more max_rep1_all.csv | sed 's/,/\t/g' | cut -f 1,2,4,6 | awk '{print$1"\t"$2"\t"$2"\t"$3"\t"$4}' | awk NR\>1 > max_rep1_all3.bed
+
+## Run bedtools intertect. 
+#bedtools intersect -wa -wb -a appris_mouse_v2_filtered_regions.bed -b m6Anet_output_annotation/max_rep1_all3.bed
+
+### Location of m6A in gene region (data preparation for Fig1B)
+```{r}
+## annotation files 
+bedtools_mESC_rep1 = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/anno_mESC_rep1_merge.bed", header = FALSE, sep = "\t")
+bedtools_mESC_rep2 = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/anno_mESC_rep2_merge.bed", header = FALSE, sep = "\t")
+bedtools_KO_mettl3 = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/anno_KO_mettl3_merge.bed", header = FALSE, sep = "\t")
+
+
+relative_position  <- function (df) {
+  df$gene = sapply(df$V1, rename_default)
+  new_df = df[,c(13,2:4,7,10:12)]
+  colnames(new_df) = c("gene", "start", "end" , "region", 
+                       "experiment", "transcript_pos", "prob", "mod_ratio")
+
+  new_df$rel_pos = 0
+  for (i in 1:nrow(new_df)) {
+    if(new_df$region[i] == "UTR5") {
+      new_df$rel_pos[i] = (new_df$transcript_pos[i] - new_df$start[i])/(new_df$end[i] - new_df$start[i] +1)
+    } else if(new_df$region[i] == "CDS") {
+      new_df$rel_pos[i] = 1 + (new_df$transcript_pos[i] - new_df$start[i])/(new_df$end[i] - new_df$start[i] +1)
+    } else if(new_df$region[i] == "UTR3") {
+      new_df$rel_pos[i] = 2 + (new_df$transcript_pos[i] - new_df$start[i])/(new_df$end[i] - new_df$start[i] +1)
+    } else (new_df$rel_pos = "none")}
+  return(new_df)
+}
+
+## It will takes a long time..... 
+anno_mESC_rep1 = relative_position(bedtools_mESC_rep1)
+anno_mESC_rep2 = relative_position(bedtools_mESC_rep2)
+anno_KO_mettl3 = relative_position(bedtools_KO_mettl3)
+
+
+anno_all_rep1_rep2_mettl3 = rbind(anno_mESC_rep1[anno_mESC_rep1$experiment == "rep1_all", ],
+                                  anno_mESC_rep2[anno_mESC_rep2$experiment == "rep2_all", ],
+                                  anno_KO_mettl3[anno_KO_mettl3$experiment == "mettl3_all", ])
+```
+
+## including mod ratio (Fig 1A)
+```{r}
+rep1_mod_region <- ggplot(anno_mESC_rep1[anno_mESC_rep1$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkgreen") +
+                    theme_classic() +
+                    ggtitle ("mESC rep1, modification ratio on gene sites")
+ 
+rep2_mod_region <- ggplot(anno_mESC_rep2[anno_mESC_rep2$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkgreen") +
+                    theme_classic() +
+                    ggtitle ("mESC rep2, modification ratio on gene sites")
+
+mettl3_mod_region <- ggplot(anno_KO_mettl3[anno_KO_mettl3$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkred") +
+                    theme_classic() +
+                    ggtitle ("mettl3 KO, modification ratio on gene sites")
+
+
+ggarrange(rep1_mod_region, rep2_mod_region, mettl3_mod_region, nrow = 3)
+
+```
+
+### Motif frequency (Fig 1B)
+```{r}
+m6Anet_mESC_rep1_max_all = reframe_m6Anet(mESC_all_rep1_max)
+m6Anet_mESC_rep2_max_all = reframe_m6Anet(mESC_all_rep2_max)
+m6Anet_mettl3_all_max = reframe_m6Anet(mettl3_all_max)
+
+# you can use order set as orderlist or sum_count values.
+motif_barplot <- function( df,  title, fill_color) {
+    ggplot(df,  aes( x=reorder(kmer, sum_count), y= sum_count)) +
+    geom_bar(fill = fill_color, stat="identity") +
+    theme_classic() + 
+    theme(axis.text.x=element_text(angle = 90, hjust = 0)) +
+    ggtitle(title)
+}
+
+
+motif_count_reframe <- function (df) { 
+  new_df <- df %>% 
+           select(gene, transcript_position, kmer) %>% 
+           group_by(kmer) %>%
+           summarise(sum_count = n()) 
+  return(new_df)
+}
+
+motif_count_reframe_prob_threshold <- function(all_df, part1_part2_df, prob_threshold) { 
+  part1_part2_df_85 = part1_part2_df[part1_part2_df$all_prob > prob_threshold, ]
+  kmer_merge = merge(part1_part2_df_85, all_df[,c(1,2,5)], by = c("gene", "transcript_position"), all.x = TRUE )
+  kmer_all = kmer_merge[,c(1,2,16,3:5)]
+  colnames(kmer_all) = c("gene", "transcript_position", "kmer", "n_reads", "prob", "mod_ratio")
+  new_df = motif_count_reframe(kmer_all)
+  return( new_df )
+}
+
+## data frames 
+motif_df_rep1 = motif_count_reframe(m6Anet_mESC_rep1_max_all)
+motif_df_rep2 = motif_count_reframe(m6Anet_mESC_rep2_max_all)
+
+motif_df_prob85_rep1 = motif_count_reframe_prob_threshold(m6Anet_mESC_rep1_max_all, max_rep1_part1_part2, 0.85)
+motif_df_prob85_rep2 = motif_count_reframe_prob_threshold(m6Anet_mESC_rep2_max_all, max_rep2_part1_part2, 0.85)
+
+## mettl3 
+motif_df_mettl3 = motif_count_reframe(m6Anet_mettl3_all_max)
+
+colnames(m6Anet_mettl3_all_max)[4] = "all_prob"
+motif_df_prob85_mettl3 = new_df = motif_count_reframe(m6Anet_mettl3_all_max[m6Anet_mettl3_all_max$all_prob > 0.85, ])
+
+     
+## make fig 1B
+merge_motif_df4 = merge(motif_df_prob85_rep1, motif_df_prob85_mettl3, by = "kmer", all = TRUE)
+colnames(merge_motif_df4) = c("kmer", "rep1_prob85", "mettl3_prob85")
+merge_motif_df4[is.na(merge_motif_df4)] <- 0
+
+barplot_df2 = melt(merge_motif_df4, id = "kmer")
+  
+
+ggplot(barplot_df2 %>% arrange(value) %>% 
+      mutate(kmer=factor(kmer, levels=kmer[variable=="rep1_prob85"])), 
+      aes(x = kmer, y = value, fill = variable)) + 
+      geom_bar(stat = "identity", position=position_dodge()) + 
+      scale_fill_manual(values=c("darkgreen", "darkred")) + 
+      theme_classic() +
+      theme(axis.text.x=element_text(angle = 90, hjust = 0))
+      
+
+```
+
+
+################################################################################
+#### QC utilizing mettl3 (supplementary fig 1)
+## mettl3 merged file  
+## mettl3 also need to recount mod ratio. 
+```{r}
+merge_all_raw_pre = merge(max_rep1_all_alt_ref_und[,c(1:14)], max_rep2_all_alt_ref_und[,c(1:14)], by = c("gene", "transcript_position"))
+
+## correlation plot 
+merge_all_raw = merge(merge_all_raw_pre, max_mettl3_all_alt_ref_und[,c(1:14)], by = c("gene", "transcript_position"))
+colnames(merge_all_raw) = c("gene", "transcript_position",
+                            "rep1_all_n_reads", "rep1_all_prob", "rep1_all_mod_ratio",
+                            "rep1_alt_n_reads", "rep1_alt_prob", "rep1_alt_mod_ratio",
+                            "rep1_ref_n_reads", "rep1_ref_prob", "rep1_ref_mod_ratio",
+                            "rep1_und_n_reads", "rep1_und_prob", "rep1_und_mod_ratio",
+                            "rep2_all_n_reads", "rep2_all_prob", "rep2_all_mod_ratio",
+                            "rep2_alt_n_reads", "rep2_alt_prob", "rep2_alt_mod_ratio",
+                            "rep2_ref_n_reads", "rep2_ref_prob", "rep2_ref_mod_ratio",
+                            "rep2_und_n_reads", "rep2_und_prob", "rep2_und_mod_ratio",
+                            "mettl3_all_n_reads", "mettl3_all_prob", "mettl3_all_mod_ratio",
+                            "mettl3_alt_n_reads", "mettl3_alt_prob", "mettl3_alt_mod_ratio",
+                            "mettl3_ref_n_reads", "mettl3_ref_prob", "mettl3_ref_mod_ratio",
+                            "mettl3_und_n_reads", "mettl3_und_prob", "mettl3_und_mod_ratio")
+
+merge_all_mod_ratio = merge_all_raw %>% select(contains("mod"))
+colnames(merge_all_mod_ratio) = c("mESC_rep1_all", "mESC_rep1_alt", "mESC_rep1_ref", "mESC_rep1_und",
+                                  "mESC_rep2_all", "mESC_rep2_alt", "mESC_rep2_ref", "mESC_rep2_und",
+                                  "KO_mettl3_all", "KO_mettl3_alt", "KO_mettl3_ref", "KO_mettl3_und")
+
+pdf("./QC_correlations.pdf", width = 5, height = 4)
+pheatmap(cor(merge_all_mod_ratio))
+dev.off()
+
+## probability comparison
+hist_prob_rep1 <- ggplot(max_rep1_all_alt_ref_und, aes(x=all_prob)) +
+                    geom_histogram(color = "black", fill="azure") +
+                     scale_x_continuous(name = "mESC_rep1 probability of modification") + 
+                    theme_classic()
+hist_prob_rep2 <- ggplot(max_rep2_all_alt_ref_und, aes(x=all_prob)) +
+                    geom_histogram(color = "black", fill="azure3") +
+                     scale_x_continuous(name = "mESC_rep2 probability of modification") + 
+                    theme_classic()
+hist_prob_mettl3 <- ggplot(max_mettl3_all_alt_ref_und, aes(x=all_prob)) +
+                    geom_histogram(color = "black", fill="deepskyblue4") +
+                     scale_x_continuous(name = "KO_mettl3 probability of modification") + 
+                    theme_classic()
+
+ggarrange(hist_prob_rep1, hist_prob_rep2, hist_prob_mettl3, ncol = 1, nrow =3)
+
+
+```
+
+## Motif frequenc: before and after filte/prob (Supplemenatry Figure 1E)
+```{r}
+motif_multiple_barplot <- function(before_filter_motif_df, after_filter_motif_df, title, bar_color) {
+  merge_motif_df = merge(before_filter_motif_df, after_filter_motif_df, by = "kmer", all = TRUE)
+  colnames(merge_motif_df) = c("kmer", "pre_filter_prob85", "post_filter_prob85")
+  merge_motif_df[is.na(merge_motif_df)] <- 0
+  
+  barplot_df = melt(merge_motif_df, id = "kmer")
+  
+  
+  multiple <- ggplot(barplot_df %>% arrange(value) %>% 
+                mutate(kmer=factor(kmer, levels=kmer[variable=="post_filter_prob85"])), 
+                aes(x = kmer, y = value, fill = variable)) + 
+                geom_bar(stat = "identity", position=position_dodge()) + 
+                ggtitle(title) +
+                scale_fill_manual(values=c("gray", bar_color)) + 
+                theme_classic() +
+                theme(axis.text.x=element_text(angle = 90, hjust = 0), legend.position = "none")
+   return(multiple)       
+}
+
+motif_rep1 <- motif_multiple_barplot(motif_df_rep1, motif_df_prob85_rep1, "rep1 modification detected motif", "darkgreen")
+
+motif_rep2 <- motif_multiple_barplot(motif_df_rep2, motif_df_prob85_rep2, "rep2 modification detected motif", "green4")
+
+## mettl3
+motif_mettl3 <- motif_multiple_barplot(motif_df_mettl3, motif_df_prob85_mettl3, "mettl3 modification detected motif", "darkred")
+
+ggarrange(motif_rep1, motif_rep2, motif_mettl3, nrow = 1)
+
+
+```

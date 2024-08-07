@@ -1,0 +1,185 @@
+---
+title: "meRIP and Longread allele bias ratio"
+author: "DP"
+date: "2024-02-11"
+---
+
+## load packages
+```{r}
+library("data.table")
+library("tidyverse")
+library("reshape2")
+
+#Plot generation - Library
+library("ggplot2")
+library("ggthemes")
+library('ggpubr')
+
+## Rename
+rename_default2 <- function(names){
+  return(unlist(strsplit(names, split = "[-]"))[1])
+}
+```
+## Load determined ASM datasets from long-read sequencing
+```{r}
+## This dataframe were generated from Mouse_Fig3_ASM.Rmd (Line 439)
+mouse_ASM = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/mouse_ASM.csv", sep = ",")
+mouse_ASM_mod <- step6_prob85[step6_prob85$Gene %in% mouse_ASM$Gene, ]
+
+```
+
+## meRIP-seq allele bias ratio plot (Figure 4F)
+```{r}
+meRIP_281004N28Rik <- data.frame(alt = c(208, 134, 41), ref = c( 104,64, 25), ratio = c(208/312, 134/194, 41/66))
+meRIP_L3mbtl2 <- data.frame(rep1 = c(2,2,0), rep2 = c(12,3,1), ratio = c(1/14, 2/5, 0) )
+rownames(meRIP_281004N28Rik) = rownames(meRIP_L3mbtl2) = c("rep1", "rep2", "rep3")
+
+meRIP_281004N28Rik$gene = "meRIP_281004N28Rik"
+meRIP_L3mbtl2$gene = "meRIP_L3mbtl2"
+
+meRIP_ratio_plot <- function (df) { 
+#ggplot(df_melt, aes(x = ASM, y = value, color =variable) ) + 
+ggplot(df, aes(x = gene, y = ratio) ) + 
+  #geom_point(aes(shape = ASM_bias), position = position_jitterdodge(0.5), alpha=0.8)+
+  geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) + 
+  geom_jitter(size = 3, width =  0.2, alpha =  0.8, shape = 18) +
+  theme_classic() + 
+  theme(legend.position="none") +
+  coord_cartesian(ylim=c(0, 1))
+
+}
+
+p_meRIP_281004N28Rik <- meRIP_ratio_plot(meRIP_281004N28Rik)
+p_meRIP_L3mbtl2 <- meRIP_ratio_plot(meRIP_L3mbtl2)
+
+```
+
+## ont allele bias ratio plot (Figure 4F)
+```{r}
+
+mouse_ASM_mod[mouse_ASM_mod$Gene == "2810004N23Rik_1346", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+mouse_ASM_mod[mouse_ASM_mod$Gene == "L3mbtl2_3081", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+
+ONT_2810004N23Rik <- data.frame( Gene = c("2810004N23Rik", "2810004N23Rik"), 
+                           alt = c(0.9111111, 0.9083969), 
+                           ref =  c(0.5425532, 0.35), 
+                           replicate = c("rep1", "rep2"))
+
+
+ONT_L3mbtl2 <- data.frame( Gene = c("L3mbtl2", "L3mbtl2"), 
+                           alt = c(0.1025641, 0.212766), 
+                           ref =  c(0.8235294, 0.7555556), 
+                           replicate = c("rep1", "rep2"))
+
+ONT_ratio_plot <- function (df) { 
+  plot_df = melt(df, id =  c("Gene", "replicate"))
+  
+  ggplot(plot_df, aes(x = variable, y = value, color = replicate) ) + 
+    geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) + 
+    geom_jitter(size = 3, width =  0.2, alpha =  0.8, shape = 19) +
+    theme_classic() + 
+    theme(legend.position="none") +
+    coord_cartesian(ylim=c(0, 1))
+
+}
+
+p_ONT_2810004N23Rik <- ONT_ratio_plot(ONT_2810004N23Rik)
+p_ONT_L3mbtl2 <- ONT_ratio_plot(ONT_L3mbtl2)
+
+ggarrange(p_meRIP_281004N28Rik, p_meRIP_L3mbtl2, p_ONT_2810004N23Rik, p_ONT_L3mbtl2, nrow = 1)
+
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/Final_main/mouse_ASM_meRIP.pdf", width = 9, height = 3.5)
+
+
+```
+
+## meRIP-seq allele bias ratio plot (Supplementary Fig 7)
+```{r}
+
+meRIP_Atp5o <- data.frame(alt = c(94,404,130), ref = c(54,374,126))
+meRIP_Ddx20 <- data.frame(alt = c(2,20,5), ref = c(2,14,4))
+
+meRIP_Gcsh <- data.frame(alt = c(122, 435, 110), ref = c(52,156,66))
+meRIP_Rsl1d1 <- data.frame(alt = c(6,56,17), ref = c(2,32,8))
+meRIP_2810004N23Rik <- data.frame(alt = c(4,18,6), ref = c(2,8,6))
+
+meRIP_ratio_plot <- function (df,name) { 
+    df$ratio = df$alt/(df$alt + df$ref)
+    rownames(df) = c("rep1", "rep2", "rep3") 
+    df$gene = name
+    
+    p <- ggplot(df, aes(x = gene, y = ratio) ) + 
+      geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) + 
+      geom_jitter(size = 3.5, width =  0.2, alpha =  0.8, shape = 17) +
+      theme_classic() + 
+      theme(legend.position="none") +
+      coord_cartesian(ylim=c(0, 1))
+    
+return(p)
+}
+
+p_meRIP_Atp5o <- meRIP_ratio_plot(meRIP_Atp5o, "meRIP_Atp5o")
+p_meRIP_Ddx20 <- meRIP_ratio_plot(meRIP_Ddx20, "meRIP_Ddx20")
+
+p_meRIP_Gcsh <- meRIP_ratio_plot(meRIP_Gcsh, "meRIP_Gcsh")
+p_meRIP_Rsl1d1 <- meRIP_ratio_plot(meRIP_Rsl1d1, "meRIP_Rsl1d1")
+p_meRIP_2810004N23Rik <- meRIP_ratio_plot(meRIP_2810004N23Rik, "meRIP_2810004N23Rik")
+
+ggarrange(p_meRIP_Atp5o, p_meRIP_Ddx20, p_meRIP_Gcsh,p_meRIP_Rsl1d1, p_meRIP_2810004N23Rik,nrow = 1)
+
+```
+
+## ont allele bias ratio plot (Supplementary Fig 7)
+```{r}
+
+Atp5o_777_mod = mouse_ASM_mod[mouse_ASM_mod$Gene == "Atp5o_777", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+Ddx20_2200_mod = mouse_ASM_mod[mouse_ASM_mod$Gene == "Ddx20_2200", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+
+Gcsh_1211_mod = mouse_ASM_mod[mouse_ASM_mod$Gene == "Gcsh_1211", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+Rsl1d1_1773_mod = mouse_ASM_mod[mouse_ASM_mod$Gene == "Rsl1d1_1773", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+r2810004N23Rik_1773_mod = mouse_ASM_mod[mouse_ASM_mod$Gene == "2810004N23Rik_1346", c("Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio","rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+
+
+
+ONT_ratio_plot <- function (df, name) { 
+  ONT_df <- data.frame( Gene = c(name,name), 
+                           alt = c(df[1,2], df[1,4]), 
+                           ref =  c(df[1,3], df[1,5]), 
+                           replicate = c("rep1", "rep2"))
+  
+  plot_df = melt(ONT_df, id =  c("Gene", "replicate"))
+  
+  p <- ggplot(plot_df, aes(x = variable, y = value, color = replicate) ) + 
+    geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) + 
+    geom_jitter(size = 4, width =  0.2, alpha =  1, shape = 19 ) +
+    theme_classic() + 
+    theme(legend.position="none") +
+    scale_color_manual(values=c("lightgray","darkgray")) +
+    coord_cartesian(ylim=c(0, 1))
+  
+return(p)
+}
+
+p_ONT_Atp5o <- ONT_ratio_plot(Atp5o_777_mod, "Atp5o")
+p_ONT_Ddx20 <- ONT_ratio_plot(Ddx20_2200_mod, "Ddx20")
+p_ONT_Gcsh <- ONT_ratio_plot(Gcsh_1211_mod, "Gcsh")
+p_ONT_Rsl1d1 <- ONT_ratio_plot(Rsl1d1_1773_mod, "Rsl1d1")
+p_ONT_2810004N23Rik_1773 <- ONT_ratio_plot(r2810004N23Rik_1773_mod, "2810004N23Rik_1773")
+#ggarrange(p_ONT_Atp5o, p_ONT_Ddx20,p_ONT_Gcsh, p_ONT_Rsl1d1, nrow = 1)
+
+ggarrange(p_meRIP_Atp5o, p_ONT_Atp5o, p_meRIP_Gcsh,p_ONT_Gcsh, p_ONT_2810004N23Rik_1773 ,nrow = 1)
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/Final_main/mouse_ASM_meRIP.pdf", width = 9, height = 3.5)
+
+## Supplementart fig 9
+ggarrange(p_meRIP_Atp5o, p_meRIP_Ddx20, p_meRIP_Gcsh,p_meRIP_Rsl1d1,p_meRIP_2810004N23Rik,
+          p_ONT_Atp5o, p_ONT_Ddx20,p_ONT_Gcsh, p_ONT_Rsl1d1, p_ONT_2810004N23Rik_1773,nrow = 2, ncol = 5)
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supfig9_meRIP_ratio.pdf", width = 10.5, height = 6.5)
+
+
+```
+
+
+

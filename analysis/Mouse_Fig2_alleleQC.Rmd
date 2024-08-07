@@ -1,0 +1,229 @@
+---
+title: "ASM QC"
+author: "DP"
+date: "2023-09-07"
+---
+
+## Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+library("palmerpenguins")
+library("data.table")
+
+# packages for plot 
+library("ggplot2")
+library("ggpubr")
+library("ggVennDiagram")
+library("pheatmap")
+library("gridExtra")
+
+
+```
+
+## Load processed data 
+## max_rep1_all_alt_ref_und, max_rep2_all_alt_ref_und, max_mettl3_all_alt_ref_und three files were generated using Mouse_Fig1_QC.Rmd. 
+```{r}
+max_rep1_all_alt_ref_und = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_rep1_all_alt_ref_und.csv", sep = ",")
+max_rep2_all_alt_ref_und = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_rep2_all_alt_ref_und.csv", sep = ",")
+max_mettl3_all_alt_ref_und = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/max_mettl3_all_alt_ref_und.csv", sep = ",")
+
+## merge all replicates data
+merge_mod_Ratio_1 = merge(max_rep1_all_alt_ref_und[,c(1,2,8,11)], max_rep2_all_alt_ref_und[,c(1,2,8,11)], by = c("gene", "transcript_position"), all = TRUE)
+merge_mod_Ratio = merge(merge_mod_Ratio_1,max_mettl3_all_alt_ref_und[,c(1,2,8,11)], by = c("gene", "transcript_position"), all = TRUE)
+colnames(merge_mod_Ratio) = c("gene", "trascript_pos", "rep1_alt", "rep1_ref", "rep2_alt", "rep2_ref", "KO_alt", "KO_ref")
+
+```
+
+
+### data QC data preparation (Fig 2A)
+```{r}
+dim(max_rep1_all_alt_ref_und[max_rep1_all_alt_ref_und$all_prob > 0.85,]) # 14609
+dim(max_rep2_all_alt_ref_und[max_rep2_all_alt_ref_und$all_prob > 0.85,]) # 13542
+dim(max_rep2_all_alt_ref_und[max_mettl3_all_alt_ref_und$all_prob > 0.85,]) #1499
+
+rep1_prob85 = data.frame(reads = c("alternative", "reference", "undefined"),
+                         variable = c("mESC_rep1","mESC_rep1","mESC_rep1"),
+                         value = c(14609, 14609, 14609),
+                         type = c("prob85","prob85", "prob85") )
+rep2_prob85 = data.frame(reads = c("alternative", "reference", "undefined"),
+                         variable = c("mESC_rep2","mESC_rep2","mESC_rep2"),
+                         value = c(13542, 13542, 13542),
+                         type = c("prob85","prob85", "prob85") )
+mettl3_prob85 = data.frame(reads = c("alternative", "reference", "undefined"),
+                         variable = c("KO_mettl3","KO_mettl3","KO_mettl3"),
+                         value = c(1499, 1499, 1499),
+                         type = c("prob85","prob85", "prob85") )
+
+
+m6Asite_bar_df$type = "m6Asite"
+rawread_bar_df$type = "read"
+
+merge_read_m6A = rbind(m6Asite_bar_df, rawread_bar_df, rep1_prob85, rep2_prob85, mettl3_prob85)
+
+
+line_plot_fig2A <-function (sample_select)  {
+ggplot(merge_read_m6A[merge_read_m6A$variable == sample_select, ],
+       aes(x = reorder(type, -value), y = log(value,10), group = reads, color = reads) ) + 
+  geom_line(alpha=0.5) +
+  geom_point(aes(shape = reads), size = 5, alpha=0.6) +  
+  #geom_jitter(aes(shape = reads), size = 3, alpha=0.5) +
+  theme_classic() + 
+  #scale_y_continuous(limits = c(log(1,10),log(600000,10) ) ) + 
+  scale_y_continuous(limits = c(3,6) ) +
+  #theme(legend.position = "none")+
+  scale_color_manual(values=c( "blue3", "firebrick2", "#999999"))+
+  scale_shape_manual(values=c(3, 16, 17))
+}
+
+rep1 <- line_plot_fig2A("mESC_rep1")
+rep2 <- line_plot_fig2A("mESC_rep2")
+mettl3 <- line_plot_fig2A("KO_mettl3")
+
+ggarrange(rep1, rep2, mettl3, nrow = 3, ncol =1)
+
+```
+
+
+# Modification ratio correlation plot (Fig2B)
+```{r}
+library(RColorBrewer)
+colMain <- colorRampPalette(brewer.pal(20, "Blues"))(200)
+cor_df = as.matrix(cor(na.omit(merge_mod_Ratio[,c(3:8)]) ) )
+
+heatmap (cor_df,  scale="none" , col = colMain, margins = c(0.4,0.8)) 
+
+# ggplot
+library(ggplot2)
+library(reshape2)
+heatmap_df = melt(cor_df, na.rm = FALSE )
+
+ggplot(heatmap_df, aes(x = Var1, y = Var2, fill = value)) +
+  geom_raster() + 
+  scale_fill_gradient(high = "darkorchid4", low = "white") +
+  geom_text(aes(label = round(value,2 ) ), size = 3) +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) 
+
+```
+
+
+## Figure 2C,D: mod ratio from replicates
+```{r}
+anno_rep1_all =  read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/annotation_max_rep1_all.csv", header = FALSE, sep = "\t")
+anno_rep2_all =  read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/annotation_max_rep2_all.csv", header = FALSE, sep = "\t")
+anno_mettl3_all =  read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/annotation/annotation_max_mettl3_all.csv", header = FALSE, sep = "\t")
+
+colnames(anno_rep1_all) = colnames(anno_rep2_all) = colnames(anno_mettl3_all) = c("gene", "UTR5", "CDS", "UTR3")
+
+my_annotation <- function (df, annot_df )  {
+  df_prob85= df[df$all_prob > 0.85,]
+  input_file = na.omit(merge(annot_df, df_prob85, by = "gene", all.y = TRUE))
+
+  input_file$region = "none"
+  input_file$start = "none"
+  input_file$end = "none"
+  
+    for (i in 1:nrow(input_file)) {
+      if (input_file$transcript_position[i] <= as.numeric(input_file$UTR3[i])) {
+      if (input_file$transcript_position[i] <= as.numeric(input_file$UTR5[i]) ) {
+        input_file$region[i] = "UTR5"
+        input_file$start[i] = 1
+        input_file$end[i] = as.numeric(input_file$UTR5[i])
+
+      } else if ((input_file$transcript_position[i] <= as.numeric(input_file$CDS[i]) )
+                 && (input_file$transcript_position[i] > as.numeric(input_file$UTR5[i]))) {
+        input_file$region[i] = "CDS"
+        input_file$start[i] = as.numeric(input_file$UTR5[i])
+        input_file$end[i] = as.numeric(input_file$CDS[i])
+
+      } else if ((input_file$transcript_position[i] <= as.numeric(input_file$UTR3[i]) )
+                 && ( input_file$transcript_position[i] > as.numeric(input_file$CDS[i]) ) ){
+        input_file$region[i] = "UTR3"
+        input_file$start[i] = as.numeric(input_file$CDS[i])
+        input_file$end[i] = as.numeric(input_file$UTR3[i])
+        
+      } else( print(paste(input_file$gene[i], input_file$transcript_position[i]))) }
+      
+    else (print(paste(input_file$gene[i], input_file$transcript_position[i]))) }
+  return(input_file)
+}
+
+
+relative_location_calculation <- function(df_all_alt_ref_und, annot_df ) { 
+  df = my_annotation(df_all_alt_ref_und, annot_df)
+  df$Gene = paste0(df$gene,"_",df$transcript_position)
+  
+  location_cal = df[order(df$gene), ]
+
+  location_cal$rel_location = 0
+  for (i in 1:nrow(location_cal)) {
+    pos = as.numeric(location_cal$transcript_position[i])
+    start = as.numeric(location_cal$start[i])
+    end = as.numeric(location_cal$end[i])
+    
+    if(location_cal$region[i] == "UTR5") {
+      location_cal$rel_location[i] <- (pos - start)/(end - start +1)
+    } else if(location_cal$region[i] == "CDS") {
+      location_cal$rel_location[i] <- 1 + (pos - start)/(end - start +1)
+    } else if(location_cal$region[i] == "UTR3") {
+      location_cal$rel_location[i] <- 2 + (pos - start)/(end - start +1)
+    }}
+  return(location_cal)
+}
+
+rel_loc_rep1 = relative_location_calculation(max_rep2_all_alt_ref_und, anno_rep2_all)
+rel_loc_rep2 = relative_location_calculation(max_rep2_all_alt_ref_und, anno_rep2_all)
+rel_loc_mettl3 = relative_location_calculation(max_mettl3_all_alt_ref_und, anno_mettl3_all)
+
+```
+
+### plot (Fig 2C and D)
+```{r}
+plot_density_mod = function (df , color_select) { 
+  colnames(df) = c("Gene", "rel_pos", "mod_ratio")
+  
+  ggplot(df, aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high =color_select) +
+                    theme_classic() +
+                    theme(legend.title = element_blank(), legend.direction = "vertical")+
+                    scale_x_continuous(limits = c(0,3))
+  }
+F2C_rep1_alt <- plot_density_mod(rel_loc_rep1[rel_loc_rep1$alt_mod_ratio > 0,c("Gene", "rel_location", "alt_mod_ratio")], "blue")
+F2C_rep1_ref <- plot_density_mod(rel_loc_rep1[rel_loc_rep1$ref_mod_ratio > 0,c("Gene", "rel_location", "ref_mod_ratio")], "red")
+
+
+F2D_mettl3_alt <- plot_density_mod(rel_loc_mettl3[rel_loc_mettl3$alt_mod_ratio > 0,c("Gene", "rel_location", "alt_mod_ratio")], "darkblue")
+F2D_mettl3_ref <- plot_density_mod(rel_loc_mettl3[rel_loc_mettl3$ref_mod_ratio > 0,c("Gene", "rel_location", "ref_mod_ratio")], "darkred")
+
+
+ggarrange(F2C_rep1_alt, F2C_rep1_ref, 
+          F2D_mettl3_alt,F2D_mettl3_ref,
+          ncol =2, nrow =2 )
+
+```
+
+## two-sample test 
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+
+B6_read = c(564944, 444514)
+CAST_read = c(557787, 443131)
+
+B6_m6A = c(114457 , 105190)
+CAST_m6A = c(112947, 105117 )
+
+t.test(B6_read, CAST_read)
+t.test(B6_m6A, CAST_m6A)
+
+
+prop.test(x = B6_read, n = c(564944+557787, 444514+443131), p = NULL, alternative = "two.sided", correct = TRUE)
+prop.test(x = B6_m6A, n = c(114457+112947, 105190+105117), p = NULL, alternative = "two.sided", correct = TRUE)
+
+```

@@ -1,0 +1,261 @@
+---
+title: "ASM_ASE"
+author: "DP"
+date: "2024-07-27"
+---
+## load packages
+```{r}
+library("devtools")
+library("ribor")
+library("data.table")
+library("tidyverse")
+library("cowplot")
+library("dplyr")
+#library(Cairo)
+library("edgeR")
+library("MatchIt")
+library("Seurat")
+library("reshape2")
+
+#Plot generation - Library
+library("ggplot2")
+library("ggthemes")
+library('ggpubr')
+library("VennDiagram")
+library("grDevices")
+library("RColorBrewer")
+
+## Rename
+## Default renaming
+rename_default <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[6])
+}
+
+
+rename_default2 <- function(names){
+  return(unlist(strsplit(names, split = "[-]"))[1])
+}
+
+#m6Anet_mESC$Gene = sapply(m6Anet_mESC$transcript_id, rename_default)
+```
+
+# Load data 
+```{r}
+## Load filtered m6A sites datasets
+## This dataframe were generated from Mouse_Fig3_ASM.Rmd (Line 324)
+step6_prob85 = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/step6_prob85.csv", sep = ",")
+step6_prob85$Gene = paste0(step6_prob85$gene, "_", step6_prob85$transcript_position)
+
+## Load determined ASM datasets
+## This dataframe were generated from Mouse_Fig3_ASM.Rmd (Line 439)
+mouse_ASM = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/mouse_ASM.csv", sep = ",")
+mouse_ASM_mod <- step6_prob85[step6_prob85$Gene %in% mouse_ASM$Gene, ]
+
+```
+
+############ Total read counts from short-read seq #############
+## Run riboR to get rna and ribo count 
+### To run this part, installation of ribor is neccessary
+```{r}
+file.path = "/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/all_three_mESC_run.ribo"
+original.ribo <- Ribo(file.path)
+
+# Ribo counts
+rc.info <- get_region_counts(ribo.object = original.ribo,
+                             region      = c("CDS"),
+                             range.lower = 26,
+                             range.upper = 35,
+                             transcript  = FALSE,
+                             tidy = FALSE,
+                             compact = FALSE
+                            )
+
+ribo_counts = dcast(rc.info , transcript ~ experiment)  
+
+## RNA count
+experiment.info <- get_info(ribo.object = original.ribo)[['experiment.info']]
+has.rnaseq <- experiment.info[experiment.info$rna.seq == TRUE, "experiment"]
+has.rnaseq
+
+rna_seq_data = get_rnaseq(ribo.object = original.ribo,
+                          tidy = FALSE,
+                          alias = FALSE,
+                          compact = FALSE,
+                          region = c("CDS") )
+rnaseq_count = dcast(rna_seq_data , transcript ~ experiment) 
+
+
+## Merge Ribo and RNA counts 
+ribo_rna_counts = merge(ribo_counts, rnaseq_count, by = "transcript")
+ribo_rna_counts$gene = sapply(ribo_rna_counts$transcript, rename_default)
+
+set.seed(3)
+#ribo_rna_counts1 = ribo_rna_counts1[, c(1,4,5,6,7)]
+
+clr_normalized_counts_pre = NormalizeData(ribo_rna_counts[,-1], 
+                                          scale.factor = 10000, margin = 2, 
+                                          normalization.method= "CLR",verbose = TRUE)
+
+
+normalized_ribo_rna_counts = data.frame(transcript = ribo_rna_counts$transcript , clr_normalized_counts_pre)
+
+normalized_ribo_rna_counts$gene = sapply(ribo_rna_counts$transcript, rename_default)
+
+
+mESC_ribo_rna_nor = normalized_ribo_rna_counts[,c(6,2:5)]
+colnames(mESC_ribo_rna_nor) = c("gene","ribo_rep1", "ribo_rep2", "rna_rep1", "rna_rep2")
+```
+
+
+############ Allele specific expression analysis ################
+## Load short-read datasets
+### We used shortread sequencing and called maternal and paternal counts by GATK.
+```{r}
+## maternal and paternal RNA counts
+GATK_rna_mESC_A = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/mESC_rep1_rna_GATK_count.csv.gz", header = TRUE, sep = "\t")
+GATK_rna_mESC_B = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/mESC_rep2_rna_GATK_count.csv.gz", header = TRUE, sep = "\t")
+
+## maternal and paternal Ribo counts 
+GATK_ribo_mESC_A = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/mESC_rep1_ribo_GATK_count.csv.gz", header = TRUE, sep = "\t")
+GATK_ribo_mESC_B = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/mESC_rep2_ribo_GATK_count.csv.gz", header = TRUE, sep = "\t")
+
+
+### SNP_count
+## Reframe GATK
+GATK_table <- function(data_input) {
+  data_input_filter = data_input[data_input$otherBases == 0 & data_input$improperPairs == 0,]
+  data_input_table = data_input_filter[, c(1,2,5,4,7,6)]
+  data_input_table$Gene = sapply(data_input_filter$contig, rename_default)
+  colnames(data_input_table) = c("transcript", "position", "REF", "ALT", "Maternal", "Paternal", "Gene") ## make sure which one is alt/ref
+  data_output= data_input_table[, c(7,2:6)]
+  
+  return(data_output)
+}
+
+## Sum SNPs and Allele Specific Expression calculation 
+GARK_reframe_sum_filter <- function(df) {
+  df_new <- GATK_table(df)
+  data_input <- df_new %>%
+              group_by(Gene) %>%
+              summarise(Paternal_Sum = sum(Maternal), 
+                        Maternal_Sum = sum(Paternal),
+                        SNP_num = n())
+  data_input$ratio = data_input$Paternal_Sum / (data_input$Maternal_Sum + data_input$Paternal_Sum)
+  data_input = data_input [ data_input$Maternal_Sum + data_input$Paternal_Sum > snp_count_threshold, ]
+  return(data_input)
+}
+
+snp_count_threshold = 10
+GATK_rna_mESC_A_sum_filter = GARK_reframe_sum_filter(GATK_rna_mESC_A)
+GATK_rna_mESC_B_sum_filter = GARK_reframe_sum_filter(GATK_rna_mESC_B)
+GATK_ribo_mESC_A_sum_filter = GARK_reframe_sum_filter(GATK_ribo_mESC_A)
+GATK_ribo_mESC_B_sum_filter = GARK_reframe_sum_filter(GATK_ribo_mESC_B)
+
+
+RNA_paternal_ratio = merge(GATK_rna_mESC_A_sum_filter[,c("Gene", "ratio")], GATK_rna_mESC_B_sum_filter[,c("Gene", "ratio")], by = "Gene")
+Ribo_paternal_ratio = merge(GATK_ribo_mESC_A_sum_filter[,c("Gene", "ratio")], GATK_ribo_mESC_B_sum_filter[,c("Gene", "ratio")], by = "Gene")
+
+colnames(RNA_paternal_ratio) = c("gene", "rna_rep1", "rna_rep2")
+colnames(Ribo_paternal_ratio) = c("gene", "ribo_rep1", "ribo_rep2")
+
+```
+
+## Lable ASM in allelel-specific datasets
+```{r}
+ASM_modratio_dif = step6_prob85[step6_prob85$Gene %in% mouse_ASM_mod$Gene ,c("gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio", "rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
+ASM_modratio_dif$rep1_mod_dif = ASM_modratio_dif$rep1_ref_mod_ratio - ASM_modratio_dif$rep1_alt_mod_ratio
+ASM_modratio_dif$rep2_mod_dif = ASM_modratio_dif$rep2_ref_mod_ratio - ASM_modratio_dif$rep2_alt_mod_ratio
+ASM_modratio_dif$dif_mean = (ASM_modratio_dif$rep1_mod_dif + ASM_modratio_dif$rep2_mod_dif ) /2
+
+REF = ASM_modratio_dif[ASM_modratio_dif$dif_mean > 0,]$gene
+ALT = ASM_modratio_dif[ASM_modratio_dif$dif_mean < 0,]$gene
+
+## ASM label 
+ASM_label <- function (df) { 
+  df$ASM = "non-ASM"
+  df[df$gene %in% unique(mouse_ASM_mod$gene), ]$ASM <- "ASM"
+  
+  df$ASM_bias <- "none"
+  df[df$gene %in% REF, ]$ASM_bias <- "B6 bias"
+  df[df$gene %in% ALT, ]$ASM_bias <- "CAST bias"
+  return(df)
+  }
+
+## ASM labels on short-read (paternal and maternal) datasets 
+RNA_paternal_ratio_ASM = ASM_label(RNA_paternal_ratio)
+Ribo_paternal_ratio_ASM = ASM_label(Ribo_paternal_ratio)
+
+## ASM labels and calculate paternal ratio on long-read (paternal and maternal) datasets 
+long_read_allele_count = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/shortread_data/long_read_allele_count.csv", sep = ",")
+
+LONG_read_count = long_read_allele_count[long_read_allele_count$gene %in% mouse_ASM_mod$gene,]
+
+LONG_pat_ratio = LONG_read_count %>%
+                    group_by(gene) %>% 
+                    summarise( rep1_alt_sum = sum(long_rep1_ASE_pat),
+                               rep1_ref_sum = sum(long_rep1_ASE_mat),
+                               rep2_alt_sum = sum(long_rep2_ASE_pat),
+                               rep2_ref_sum = sum(long_rep2_ASE_mat))
+
+LONG_pat_ratio$long_rep1_pat_ratio = LONG_pat_ratio$rep1_alt_sum / (LONG_pat_ratio$rep1_ref_sum + LONG_pat_ratio$rep1_alt_sum)
+LONG_pat_ratio$long_rep2_pat_ratio = LONG_pat_ratio$rep2_alt_sum / (LONG_pat_ratio$rep2_ref_sum + LONG_pat_ratio$rep2_alt_sum)
+
+Longread_pat <- ASM_label(LONG_pat_ratio[,c(1,6,7)])
+
+```
+
+## Function for PLOT: ASE and ASM scatter plot 
+### ( alt mod - ref mod ) add a regression line
+```{r}
+revision_ASM_dif_pat_ratio_scatter <- function (df, title_plot, ymin, ymax) { 
+  df_ASE_ASM = df_reframe_ASE_ASM(df)
+  df_ASE_ASM$mod_dif = df_ASE_ASM$CAST_mod_ratio - df_ASE_ASM$B6_mod_ratio
+  ggplot(df_ASE_ASM) +
+  geom_point(aes(x = mod_dif, y = ASE_ratio, shape = rep, color =ASM_bias_new),
+             alpha=0.8,
+             size = 2.5)+
+  ggtitle (title_plot) +
+  theme_classic() + 
+  #theme(legend.position="top") +
+  theme(legend.position="none") +  
+  scale_x_continuous(limits = c(-1, 1)) + 
+  scale_y_continuous(limits = c(ymin, ymax)) + 
+  geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) +
+  geom_smooth(aes(x = mod_dif, y = ASE_ratio), method = "lm", se = FALSE, color=  "darkgray")
+}
+
+revision_ASM_dif_pat_ratio_mean_boxplot <- function (df, title_plot, ymin, ymax) { 
+  df_ASE_ASM = df_reframe_ASE_ASM(df)
+  df_ASE_ASM$mod_dif = df_ASE_ASM$CAST_mod_ratio - df_ASE_ASM$B6_mod_ratio
+  ggplot(df_ASE_ASM) +
+  geom_boxplot(aes(x = ASM_bias, y = ASE_ratio))+
+  ggtitle (title_plot) +
+  theme_classic() + 
+  #theme(legend.position="top") +
+  theme(legend.position="none") +
+  scale_y_continuous(limits = c(ymin, ymax)) + 
+  geom_hline(yintercept= 0.5, linetype="dashed", color = "red", size=0.2) 
+}
+
+```
+
+## PLOT generation (Figure 5B)
+```{r}
+dif_long1 <- revision_ASM_dif_pat_ratio_scatter(Longread_pat, "longread_mod_ratio",0,1)
+dif_short1 <- revision_ASM_dif_pat_ratio_scatter(RNA_paternal_ratio_ASM, "shortread_mod_ratio", 0,1)
+dif_ribo1 <- revision_ASM_dif_pat_ratio_scatter(Ribo_paternal_ratio_ASM, "Ribo_mod_ratio",0,1)
+
+dif_long2 <- revision_ASM_dif_pat_ratio_scatter(Longread_pat, "longread_mod_ratio", 0.3,0.8)
+dif_short2 <- revision_ASM_dif_pat_ratio_scatter(RNA_paternal_ratio_ASM, "shortread_mod_ratio", 0.3,0.8)
+dif_ribo2 <- revision_ASM_dif_pat_ratio_scatter(Ribo_paternal_ratio_ASM, "Ribo_mod_ratio", 0.3,0.8)
+
+dif_long_box <- revision_ASM_dif_pat_ratio_mean_boxplot(Longread_pat, "longread_mod_ratio", 0.3,0.8)
+dif_short_box <- revision_ASM_dif_pat_ratio_mean_boxplot(RNA_paternal_ratio_ASM, "shortread_mod_ratio", 0.3,0.8)
+dif_ribo_box <- revision_ASM_dif_pat_ratio_mean_boxplot(Ribo_paternal_ratio_ASM, "Ribo_mod_ratio", 0.3,0.8)
+
+merge_all <- ggarrange(dif_long1, dif_short1, dif_ribo1,
+                       dif_long2, dif_short2, dif_ribo2,
+                       dif_long_box, dif_short_box, dif_ribo_box,
+                          nrow = 3, ncol =3 )
+merge_all
+```
