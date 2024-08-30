@@ -320,3 +320,10 @@ ggarrange(motif_rep1, motif_rep2, motif_mettl3, nrow = 1)
 
 
 ```
+## weighted fit 
+```{r}
+longreadcount_ratio = read.csv("/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/longreadcount_ratio.csv" ) 
+library(boot)
+corr(longreadcount_ratio[,c("rep1_short_ratio", "rep1_long_ratio")], 
+       w=longreadcount_ratio$rep1_long_count )
+```
