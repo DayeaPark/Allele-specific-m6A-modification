@@ -545,6 +545,14 @@ ncol = 2, nrow = 5)
 ```
 ### Merged biased p_value and make harmonic mena p_value 
 ```{r}
+## replace zero to 0.00000001
+JHU_bias_pvalue[JHU_bias_pvalue$bias_pvalue == 0,]$bias_pvalue <- 0.00001
+#OICR_bias_pvalue[OICR_bias_pvalue$bias_pvalue == 0,]$bias_pvalue <- 0.00001
+UBC_bias_pvalue[UBC_bias_pvalue$bias_pvalue == 0,]$bias_pvalue <- 0.00001
+UCSC_bias_pvalue[UCSC_bias_pvalue$bias_pvalue == 0,]$bias_pvalue <- 0.00001
+UN_bias_pvalue[UN_bias_pvalue$bias_pvalue == 0,]$bias_pvalue <- 0.00001
+
+
 ## merge all datasets
 #put all data frames into list
 df_list <- list(JHU_bias_pvalue, OICR_bias_pvalue, UBC_bias_pvalue, UCSC_bias_pvalue, UN_bias_pvalue)
@@ -580,13 +588,28 @@ for( i in 1:nrow(human_merge_bias_pvalue) ) {
 ## filter number of exsitant p_value. 
 human_harmonic_pvalue_valid <- human_merge_bias_pvalue[rowSums(is.na(human_merge_bias_pvalue) ) < 3, ]
 
+## no-adjusted p-value
 human_harmonic_pvalue_sig_high <- human_harmonic_pvalue_valid[human_harmonic_pvalue_valid$harmonic_p <= 0.01 , ]$Gene
 length(human_harmonic_pvalue_sig_high)  
 
+```
 
-#human_ASM_UCSC <- UCSC_part1_part2[UCSC_part1_part2$Gene %in% human_harmonic_pvalue_sig_high, ]
-#save(human_ASM_UCSC, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/NA12878/human_ASM_UCSC.Rdata")
+## adjust p-value (FDR)
+```{r}
+p_thres = 0.1
 
+p_adjust <- function (method_pick, harmonic_df,  p_threshold = p_thres) { 
+  harmonic_df$p_adjust = p.adjust(harmonic_df$harmonic_p, method = method_pick)
+  nonadjust_ASM = harmonic_df[harmonic_df$p_adjust < p_threshold, ]
+  return(nonadjust_ASM)
+  
+  }
+
+human_harmonic_pvalue_valid$p_adjust = p.adjust(human_harmonic_pvalue_valid$harmonic_p, method = "fdr")
+
+## It will select 2 ASM, but we reported 3 sites in the paper where adjust p-value < 0.1. These 3 sites are overlapped with the 3 ASM sites when we use no-adjust p vlaue. 
+
+human_fdr_ASM = p_adjust("fdr", human_harmonic_pvalue_valid)
 
 ```
 
