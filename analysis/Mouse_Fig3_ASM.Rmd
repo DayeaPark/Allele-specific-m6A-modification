@@ -1,7 +1,7 @@
 ---
 title: "ASM determination and analysis"
 author: "DP"
-date: "2023-09-07"
+date: "2024-08-30"
 output: html_document
 ---
 
@@ -347,7 +347,8 @@ mod_dif_plot(merge_part1_part2)
 ```
 
 ############### ASM analysis ###############  
-### function for reframe for bootsrap
+
+### functions for reframe for bootsrap 
 ```{r}
 ## Detailed SNP information reframe 
 reframe_for_bootstrap <- function (m6A_df , prob_threshold) { 
@@ -400,19 +401,6 @@ p_value_of_each_site <- function ( df_all, sample_n, effect_size_threshold) {
 return(df_modcount[,c("Gene","alt_mod_ratio","ref_mod_ratio", "pvalue_ref", "pvalue_alt")])
 }
 
-## It will take a long time if you use large number for bootstrapping 
-## In th paper, we used 10,000 bootstrap. 
-
-mouse_rep1_pvalue = p_value_of_each_site(rep1_part1_part2, 10000, 0.1)
-mouse_rep2_pvalue = p_value_of_each_site(rep2_part1_part2, 10000, 0.1)
-
-
-```
-
-## Select p-value according to the allele-bias
-### In this study we obtained one-side p-value where modification differences has positive values. 
-### This is the final p-value
-```{r}
 ## pvalue from methylation biasness.
  p_value_bias <- function (df_p_value) { 
     for (i in 1:nrow (df_p_value)) { 
@@ -422,40 +410,103 @@ mouse_rep2_pvalue = p_value_of_each_site(rep2_part1_part2, 10000, 0.1)
         df_p_value$bias_pvalue[i] = df_p_value$pvalue_ref[i]}
       }
    return(df_p_value[,c(1:3,6)]) 
-    }
-mouse_rep1_biase_p <- p_value_bias(mouse_rep1_pvalue)
-mouse_rep2_biase_p <- p_value_bias(mouse_rep2_pvalue)
+ }
+ 
+## harmonic mean p value function 
+harmonic_mean_p_value_sub <- function(merged_p_values) {
+  p_value_noNA = na.omit(merged_p_values)
+  reciprocals <- 1 / p_value_noNA
+  harmonic_mean_p <- length(p_value_noNA) / sum(reciprocals)
+  
+  return(harmonic_mean_p)
+}
+
+harmonic_mean_p_value <- function(df_rep1_p, df_rep2_p) {
+  merged_p_values = merge(df_rep1_p[c("Gene", "bias_pvalue")], df_rep2_p[c("Gene", "bias_pvalue")], 
+                          by = "Gene", all = TRUE)
+  colnames(merged_p_values) = c("Gene", "rep1_pvalue", "rep2_pvalue")
+  
+  
+  for( i in 1:nrow(merged_p_values) ) { 
+  p_value_list = c(merged_p_values$rep1_pvalue[i],
+                   merged_p_values$rep2_pvalue[i])
+  merged_p_values$harmonic_p[i] <- harmonic_mean_p_value_sub(p_value_list) }
+  
+  return(merged_p_values)
+}
+
+
 
 ```
-
-### Final ASM determination
+ 
+## calculate p-value via bootstrap samples
 ```{r}
-mouse_merge_bias_p = merge(mouse_rep1_biase_p %>% select("Gene", contains("pvalue") ),
-                           mouse_rep2_biase_p %>% select("Gene", contains("pvalue") ), by = "Gene", all = TRUE)
-colnames(mouse_merge_bias_p) = c("Gene", "rep1_pvalue", "rep2_pvalue")
-mouse_ASM_pval <- na.omit(mouse_merge_bias_p)
+# CAUTION: It takes a long time and memory. Your local computer need a lot of free space to run this. 
+## 1M bootstrap and effect size 0.1 
+mouse_rep1_pvalue_effectsize = p_value_of_each_site(rep1_part1_part2, 1000000, 0.1)
+mouse_rep2_pvalue_effectsize = p_value_of_each_site(rep2_part1_part2, 1000000, 0.1)
 
-pvalue_cutoff = -log(0.05)
-mouse_ASM <- mouse_ASM_pval[-log(mouse_ASM_pval$rep1_pvalue) > pvalue_cutoff & -log(mouse_ASM_pval$rep2_pvalue) > pvalue_cutoff,]
+## 1M bootstrap and no-effect size 
+mouse_rep1_pvalue_0 = p_value_of_each_site(rep1_part1_part2, 1000000, 0)
+mouse_rep2_pvalue_0 = p_value_of_each_site(rep2_part1_part2, 1000000, 0)
 
-#write.csv(mouse_ASM, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/mouse_ASM.csv", row.names = FALSE, quote = FALSE)
+## search for p-value in biased allele.
+rep1_1M_effectsize_p <- p_value_bias(mouse_rep1_pvalue_effectsize)
+rep2_1M_effectsize_p <- p_value_bias(mouse_rep2_pvalue_effectsize)
+
+rep1_1M_noeffectsize_p <- p_value_bias(mouse_rep1_pvalue_0 )
+rep2_1M_noeffectsize_p <- p_value_bias(mouse_rep2_pvalue_0)
+
+
+## In 1M bootstrap results, replace zero to 0.0000001
+rep1_1M_effectsize_p[rep1_1M_effectsize_p$bias_pvalue == 0,]$bias_pvalue <- 0.0000001
+rep2_1M_effectsize_p[rep2_1M_effectsize_p$bias_pvalue == 0,]$bias_pvalue <- 0.0000001
+
+rep1_1M_noeffectsize_p[rep1_1M_noeffectsize_p$bias_pvalue == 0,]$bias_pvalue <- 0.0000001
+rep2_1M_noeffectsize_p[rep2_1M_noeffectsize_p$bias_pvalue == 0,]$bias_pvalue <- 0.0000001
+
+#write.csv(rep1_1M_effectsize_p, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/revision_upload/rep1_1M_effectsize_p.csv", row.names = FALSE, quote = FALSE )
+#write.csv(rep2_1M_effectsize_p, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/revision_upload/rep2_1M_effectsize_p.csv", row.names = FALSE, quote = FALSE )
+#write.csv(rep1_1M_noeffectsize_p, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/revision_upload/rep1_1M_noeffectsize_p.csv", row.names = FALSE, quote = FALSE )
+#write.csv(rep2_1M_noeffectsize_p, file = "/Users/dayeapark/Desktop/Script_upload/datasets/processed_data/revision_upload/rep2_1M_noeffectsize_p.csv", row.names = FALSE, quote = FALSE )
 ```
 
-## PLOT: p-value distiribution after boostraps (Fig 3A)
+## caluclate adjust harmonic p-values between rep1 and rep2
+```{r}
+harmonic_rep1_rep2_1M_effect <- na.omit(harmonic_mean_p_value(rep1_1M_effectsize_p, rep2_1M_effectsize_p))
+harmonic_rep1_rep2_1M_noeffect <- na.omit(harmonic_mean_p_value(rep1_1M_noeffectsize_p, rep2_1M_noeffectsize_p))
+
+m6A_count <- length(harmonic_rep1_rep2_1M_noeffect$harmonic_p) 
+p_thres = 0.1
+
+p_adjust <- function (method_pick, harmonic_df, p_threshold = p_thres) { 
+  harmonic_df$p_adjust = p.adjust(harmonic_df$harmonic_p, method = method_pick)
+  nonadjust_ASM = harmonic_df[harmonic_df$p_adjust < p_threshold, ]
+  return(nonadjust_ASM)
+  
+  }
+
+fdr_ASM_effectsize = p_adjust("fdr", harmonic_rep1_rep2_1M_effect)
+fdr_ASM_noeffectsize = p_adjust("fdr", harmonic_rep1_rep2_1M_noeffect)
+```
+
+
+## PLOT: merge two datasets (Fig 3B)
 ```{r}
 pvalue_cutoff = -log(0.05,10)
 
-ggplot(mouse_ASM_pval, aes(x= -log(rep1_pvalue,10), y = -log(rep2_pvalue,10)) )+ 
+ggplot(harmonic_rep1_rep2_1M_effect, aes(x= -log(rep1_pvalue,10), y = -log(rep2_pvalue,10)) )+ 
   geom_point(size = 1, shape = 19, alpha = 1/2) +
   geom_hline(yintercept= pvalue_cutoff, linetype="dashed", color = "red", size=0.2)+
   geom_vline(xintercept= pvalue_cutoff, linetype="dashed", color = "red", size=0.2) + 
   theme_classic() 
 
-
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/Final_main/Fig3_mouse_cutoff_pvalue.pdf", width = 6, height = 5)
 ```
 
 ## PLOT: mod difference, color mark (Figure 3E)
 ```{r}
+mouse_ASM <- fdr_ASM_effectsize
 mouse_post_filter_merge <- step6_prob85[,c("gene","Gene", "rep1_alt_mod_ratio", "rep1_ref_mod_ratio", "rep2_alt_mod_ratio", "rep2_ref_mod_ratio")]
 mouse_post_filter_merge$rep1_mod_dif = mouse_post_filter_merge$rep1_ref_mod_ratio - mouse_post_filter_merge$rep1_alt_mod_ratio
 mouse_post_filter_merge$rep2_mod_dif = mouse_post_filter_merge$rep2_ref_mod_ratio - mouse_post_filter_merge$rep2_alt_mod_ratio
@@ -532,7 +583,7 @@ rownames(ASM_heatmap_df) = ASM_heatmap_df$Gene
 Name_order = c("Armc10_1170", "Dnpep_1287", "Glmp_1308", "Nudt1_639", "L3mbtl2_3081", 
           "Tmbim6_2019", "Gcsh_1211", "Trim25_4580", "Kif11_4336", "Atp5o_777", 
           "Psrc1_1465", "Pml_2377", "Armc10_1624", "Gnpat_1888", "Rsl1d1_1773", 
-          "Ccnb1_1470", "Ddx20_2200", "Kif5b_4766", "Cmtm7_591", "2810004N23Rik_1346", 
+          "Ccnb1_1470", "Kif5b_4766", "Cmtm7_591", "2810004N23Rik_1346", 
           "Uhrf1_3221", "Atmin_4453", "Dgcr2_3682", "Stk38_2863")
 
 name_ordered <- ASM_heatmap_df %>% mutate(name = fct_relevel(Gene, Name_order) )
