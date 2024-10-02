@@ -1,0 +1,455 @@
+---
+title: "QC"
+author: "DP"
+date: "2023-09-07"
+output: html_document
+---
+## Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+library("palmerpenguins")
+library("data.table")
+
+# packages for plot 
+library("ggplot2")
+library("hrbrthemes")
+library("ggpubr")
+library("ggVennDiagram")
+library("pheatmap")
+library("gridExtra")
+library("grid")
+library("cowplot")
+
+## Rename
+## Default renaming
+rename_default <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[6])
+}
+
+
+```
+
+
+################################################################## 
+
+#### Supplementary Figure 1D Motif 
+```{r}
+
+# you can use order set as order list or sum_count values.
+motif_count_reframe <- function (df) { 
+  new_df <- df %>% 
+           select(gene, transcript_position, kmer) %>% 
+           group_by(kmer) %>%
+           summarise(sum_count = n()) 
+  return(new_df)
+}
+
+motif_count_reframe_prob_threshold <- function(all_df, part1_part2_df, prob_threshold) { 
+  part1_part2_df_85 = part1_part2_df[part1_part2_df$all_prob > prob_threshold, ]
+  kmer_merge = merge(part1_part2_df_85, all_df[,c(1,2,5)], by = c("gene", "transcript_position"), all.x = TRUE )
+  kmer_all = kmer_merge[,c(1,2,16,3:5)]
+  colnames(kmer_all) = c("gene", "transcript_position", "kmer", "n_reads", "prob", "mod_ratio")
+  new_df = motif_count_reframe(kmer_all)
+  return( new_df )
+}
+
+## data frames 
+motif_df_rep1 = motif_count_reframe(m6Anet_mESC_rep1_max_all)
+motif_df_rep2 = motif_count_reframe(m6Anet_mESC_rep2_max_all)
+
+motif_df_prob85_rep1 = motif_count_reframe_prob_threshold(m6Anet_mESC_rep1_max_all, max_rep1_part1_part2, 0.85)
+motif_df_prob85_rep2 = motif_count_reframe_prob_threshold(m6Anet_mESC_rep2_max_all, max_rep2_part1_part2, 0.85)
+
+## merge replicates 
+merge_rep1_motif_count = merge(motif_df_prob85_rep1, motif_df_rep1, by = "kmer", all.y = TRUE)
+merge_rep2_motif_count = merge(motif_df_prob85_rep2, motif_df_rep2, by = "kmer", all.y = TRUE)
+
+merge_all_motif_count = merge(merge_rep1_motif_count, merge_rep2_motif_count , by = "kmer", all = TRUE)
+colnames(merge_all_motif_count) = c("kmer", "rep1_prob85", "rep1_all", "rep2_prob85", "rep2_all")
+merge_all_motif_count[is.na(merge_all_motif_count)] <- 0
+merge_all_motif_count$mean_prob85 = (merge_all_motif_count$rep1_prob85 + merge_all_motif_count$rep2_prob85)/2
+merge_all_motif_count$mean_all = (merge_all_motif_count$rep1_all+ merge_all_motif_count$rep2_all)/2
+
+
+barplot_df = melt(merge_all_motif_count[,c("kmer", "mean_prob85", "mean_all")], id = "kmer")
+  
+  
+F1D_mESC_motif <-ggplot(barplot_df %>% arrange(value) %>% 
+               mutate(kmer=factor(kmer, levels=kmer[variable=="mean_prob85"])), 
+               aes(x = kmer, y = value, fill = variable)) + 
+               geom_bar(stat = "identity", position=position_dodge()) + 
+               scale_fill_manual(values=c( "#E69F00", "gray")) + 
+               theme_classic() +
+               theme(legend.position = "none", axis.text.x=element_text(angle = 90, hjust = 0))
+
+
+## mettl3 
+motif_df_mettl3 = motif_count_reframe(m6Anet_mettl3_all_max)
+colnames(m6Anet_mettl3_all_max)[4] = "all_prob"
+motif_df_prob85_mettl3 = motif_count_reframe(m6Anet_mettl3_all_max[m6Anet_mettl3_all_max$all_prob > 0.85, ])
+
+mettl3_all_motif_count = merge(motif_df_prob85_mettl3, motif_df_mettl3, by = "kmer", all = TRUE)
+colnames(mettl3_all_motif_count) = c("kmer", "mettl3_prob85", "mettl3_all")
+mettl3_all_motif_count[is.na(mettl3_all_motif_count)] <- 0
+barplot_df_mettl3 = melt(mettl3_all_motif_count, id = "kmer")
+
+
+F1E_mettl3_motif <- ggplot(barplot_df_mettl3 %>% arrange(value) %>% 
+                 mutate(kmer=factor(kmer, levels=kmer[variable=="mettl3_prob85"])), 
+                 aes(x = kmer, y = value, fill = variable)) + 
+                 geom_bar(stat = "identity", position=position_dodge()) + 
+                 scale_fill_manual(values=c( "#996600", "darkgray")) + 
+                 theme_classic() +
+                 theme(legend.position = "none", axis.text.x=element_text(angle = 90, hjust = 0))
+
+```
+
+
+## Figure 1 Final plot 
+```{r}
+plot_grid(F1B_anno_density,F1B_long_rep2_short_rep1,
+          F1D_mESC_motif,F1E_mettl3_motif,
+          labels = c("B","C","D","E"), 
+          label_size = 12, ncol = 2)
+
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/01_QC/Figure1_regend.pdf", width = 8, height = 9)
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/01_QC/Figure1_noregend.pdf", width = 8, height = 6)
+
+```
+
+
+## Supplementary Figure 1C: mod ratio from replicates
+```{r}
+## including mod ratio 
+F1D_rep1_mod_region <- ggplot(anno_mESC_rep1[anno_mESC_rep1$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkgreen") +
+                    theme_classic() +
+                    #ggtitle ("mESC rep1, modification ratio on gene sites") +
+                    theme( legend.title = element_blank(), legend.direction = "vertical")
+ 
+F1D_rep2_mod_region <- ggplot(anno_mESC_rep2[anno_mESC_rep2$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkgreen") +
+                    theme_classic() +
+                    #ggtitle ("mESC rep2, modification ratio on gene sites") +
+                    theme(legend.title = element_blank(), legend.direction = "vertical")
+
+F1D_mettl3_mod_region <- ggplot(anno_KO_mettl3[anno_KO_mettl3$prob > 0.85,], aes(x = rel_pos, y= mod_ratio)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = "darkred") +
+                    theme_classic() +
+                    #ggtitle ("mettl3 KO, modification ratio on gene sites") +
+                    theme(legend.title = element_blank(), legend.direction = "vertical")
+
+F1D_combined_plot <- plot_grid(F1D_rep1_mod_region, F1D_rep2_mod_region, F1D_mettl3_mod_region, ncol = 1)
+
+```
+
+#### QC utilizing mettl3 (supplementary fig 1B)
+## mettl3 merged file  
+## mettl3 also need to recount mod ratio. 
+```{r}
+
+## probability comparison
+hist_prob_rep1 <- ggplot(m6Anet_mESC_rep1_max_all, aes(x=probability_modified)) +
+                    geom_histogram(color = "black", fill="azure") +
+                     scale_x_continuous(name = "mESC_rep1 probability of modification") + 
+                    theme_classic()
+hist_prob_rep2 <- ggplot(m6Anet_mESC_rep2_max_all, aes(x=probability_modified)) +
+                    geom_histogram(color = "black", fill="azure3") +
+                     scale_x_continuous(name = "mESC_rep2 probability of modification") + 
+                    theme_classic()
+hist_prob_mettl3 <- ggplot(m6Anet_mettl3_all_max, aes(x=probability_modified)) +
+                    geom_histogram(color = "black", fill="deepskyblue4") +
+                     scale_x_continuous(name = "KO_mettl3 probability of modification") + 
+                    theme_classic()
+
+plot_grid(hist_prob_rep1, hist_prob_rep2, hist_prob_mettl3, labels = "AUTO", ncol = 1, align = "h")
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/01_QC/prob_count.pdf", width = 5, height = 10)
+
+```
+
+
+
+## Correlation scatter plot 
+```{r}
+prob85_cor_df = merge_prob85 %>% select(gene, contains("mod_ratio"))
+cor(prob85_cor_df[,-1])
+
+scatter_plot_correlation_grid(prob85_cor_df, "Prob85 correlation of moditifation ratio",  "spearman", "NULL")
+scatter_plot_correlation_grid(prob85_cor_df, "Prob85 correlation of moditifation ratio",  "spearman", "NULL")
+scatter_plot_correlation_grid(prob85_cor_df, "Prob85 correlation of moditifation ratio",  "spearman", "NULL")
+
+cor_method = "spearman"
+smooth_method = "NULL"
+
+part1_merge = merge(part1_max_rep1_filter2[,c(1:14)], part1_max_rep2_filter2[,c(1:14)], by = c("gene", "transcript_position") )
+part2_merge = merge(part2_rep1_filter4_recount[,c(1:14)], part2_rep2_filter4_recount[,c(1:14)], by = c("gene", "transcript_position") )
+
+colnames(part1_merge) = colnames(part2_merge) <- colnames(merge_prob85[,c(1:26)])
+
+part1_all <- scatter_plot_correlation(part1_merge, "rep1_all_mod_ratio", "rep2_all_mod_ratio", "", cor_method, smooth_method)
+part1_alt <- scatter_plot_correlation(part1_merge, "rep1_alt_mod_ratio", "rep2_alt_mod_ratio", "", cor_method, smooth_method)
+part1_ref <- scatter_plot_correlation(part1_merge, "rep1_ref_mod_ratio", "rep2_ref_mod_ratio", "", cor_method, smooth_method)
+
+part2_all <- scatter_plot_correlation(part2_merge, "rep1_all_mod_ratio", "rep2_all_mod_ratio", "", cor_method, smooth_method)
+part2_alt <- scatter_plot_correlation(part2_merge, "rep1_alt_mod_ratio", "rep2_alt_mod_ratio", "", cor_method, smooth_method)
+part2_ref <- scatter_plot_correlation(part2_merge, "rep1_ref_mod_ratio", "rep2_ref_mod_ratio", "", cor_method, smooth_method)
+
+prob85_all <- scatter_plot_correlation(merge_prob85, "rep1_all_mod_ratio", "rep2_all_mod_ratio", "", cor_method, smooth_method)
+prob85_alt <- scatter_plot_correlation(merge_prob85, "rep1_alt_mod_ratio", "rep2_alt_mod_ratio", "", cor_method, smooth_method)
+prob85_ref <- scatter_plot_correlation(merge_prob85, "rep1_ref_mod_ratio", "rep2_ref_mod_ratio", "", cor_method, smooth_method)
+
+plot_grid(part1_all, part1_alt, part1_ref, 
+          part2_all, part2_alt, part2_ref, 
+          prob85_all, prob85_alt, prob85_ref, 
+          labels = "AUTO", ncol = 3)
+
+
+```
+
+################################################################## 
+## scatter plot (supplementary Fig 3)
+```{r}
+
+#m6Anet_mESC$Gene = sapply(m6Anet_mESC$transcript_id, rename_default)
+
+scatter_plot_correlation <- function(df, f1, f2, title, cor_method, smooth_method) {
+  new_merge_df = df %>% select(f1, f2)
+  colnames(new_merge_df) = c("V1", "V2")
+  
+  correlation_spearman = cor(new_merge_df , method = cor_method)
+  annotation_condition = grobTree(textGrob(paste("Spearman Correlation : ", round(correlation_spearman[1,2],4) ),
+                                 x = 0.05, y = 0.98, hjust = 0,
+                                 gp = gpar(col = "red", fontsize = 11, fontface = "bold")))
+
+  plot <- ggplot( new_merge_df, aes( x= V1, y= V2 )) +
+              geom_point(size = 0.5, shape = 19,  color= "black") +
+              #stat_cor(method ="spearman") + 
+              theme_classic() +
+              ggtitle(title) +
+              geom_smooth(method = smooth_method, se = FALSE) + 
+              scale_x_continuous(name = f1) +
+              scale_y_continuous(name = f2) +
+              annotation_custom(annotation_condition)
+    return(plot)
+}
+
+
+scatter_plot_correlation_grid <- function(df, title, cor_method, smooth_method) {
+part1_all <- scatter_plot_correlation(df, "rep1_all_mod_ratio", "rep2_all_mod_ratio", "", cor_method, smooth_method) # NULL >> lm 
+part1_alt <- scatter_plot_correlation(df, "rep1_alt_mod_ratio", "rep2_alt_mod_ratio", "", cor_method, smooth_method) # NULL >> lm 
+part1_ref <- scatter_plot_correlation(df, "rep1_ref_mod_ratio", "rep2_ref_mod_ratio", "", cor_method, smooth_method)
+#part1_und <- scatter_plot_correlation(df, "rep1_und_mod_ratio", "rep2_und_mod_ratio", "", cor_method, smooth_method)
+
+final_plot <- grid.arrange(part1_all, part1_alt, part1_ref, 
+             top = title)
+return(final_plot)
+}
+
+
+```
+
+###########################################################################
+### ASM location (supplementary Fig 8B)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/anno_mESC_rep1.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/anno_mESC_rep2.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/anno_KO_mettl3.Rdata")
+
+## density plot 
+REF_ATL_densityplot <- function (df, title) {
+ggplot(df, aes(x = rel_pos, colour = experiment)) +
+  geom_density(size = 0.8) + 
+  xlim(0, 3) + 
+  theme_classic() + 
+  geom_vline(xintercept = 1:2, col = "grey") +
+  #ggtitle(title) + 
+  theme(legend.position = c(0.15, 0.9), legend.title = element_blank())+
+  ylim(0,1.6) 
+  
+}
+anno_mESC_rep1_ref_alt = anno_mESC_rep1[anno_mESC_rep1$experiment %in% c("rep1_alt", "rep1_ref"), ]
+anno_mESC_rep2_ref_alt = anno_mESC_rep2[anno_mESC_rep2$experiment %in% c("rep2_alt", "rep2_ref"), ]
+anno_mESC_mettl3_ref_alt = anno_KO_mettl3[anno_KO_mettl3$experiment %in% c("mettl3_alt", "mettl3_ref"), ]
+
+F2C_rep1_density <- REF_ATL_densityplot(anno_mESC_rep1_ref_alt[anno_mESC_rep1_ref_alt$prob > 0.85,] , "mESC_rep1, probability > 0.85")
+F2C_rep2_density <- REF_ATL_densityplot(anno_mESC_rep2_ref_alt[anno_mESC_rep2_ref_alt$prob > 0.85,], "mESC_rep2, probability > 0.85")
+F2C_mettl3_density <- REF_ATL_densityplot(anno_mESC_mettl3_ref_alt[anno_mESC_mettl3_ref_alt$prob > 0.85,], "KO_mettl3, probability > 0.85")
+
+### annotation site of ASM 
+
+anno_mESC_rep1_ref_alt$Gene = paste0(anno_mESC_rep1_ref_alt$gene, "_", anno_mESC_rep1_ref_alt$transcript_pos)
+anno_mESC_rep2_ref_alt$Gene = paste0(anno_mESC_rep2_ref_alt$gene, "_", anno_mESC_rep2_ref_alt$transcript_pos)
+anno_mESC_mettl3_ref_alt$Gene = paste0(anno_mESC_mettl3_ref_alt$gene, "_", anno_mESC_mettl3_ref_alt$transcript_pos)
+
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+
+
+ASM_5mer$bias = "none"
+ASM_5mer[ASM_5mer$ref_mod_ratio_mean > ASM_5mer$alt_mod_ratio_mean, ]$bias <- "B6"
+ASM_5mer[ASM_5mer$ref_mod_ratio_mean < ASM_5mer$alt_mod_ratio_mean, ]$bias <- "CAST"
+
+ASM_annotation = unique(anno_mESC_rep1_ref_alt[anno_mESC_rep1_ref_alt$Gene %in% ASM_5mer$Gene, ])
+ASM_annotation_group = merge(ASM_annotation, ASM_5mer[,c("Gene", "ASM_group", "bias")])
+
+```
+
+### ASM plot location 
+```{r}
+gene_region_density_plot <- function (df, color_select) {
+  
+  ggplot(df, aes(x = rel_pos, y= mod_ratio, color = experiment)) +
+                    geom_bin2d(bins = 100, size = .2) + 
+                    scale_fill_gradient2(high = color_select) +
+                    theme_classic() +
+                    theme(legend.title = element_blank(), legend.direction = "vertical")+
+                    scale_x_continuous(limits = c(0,3))
+  
+}
+
+gene_region_density_plot(ASM_annotation_group, "red" )
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supple_ASM_sites.pdf", width = 5, height = 3)
+
+```
+
+############################ NOT USED FOR PAPER ###################################
+## Chromosom occupancy
+```{r}
+## entire gene numbers 
+chr_gene = read.table("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/mouse_reference/mm10/chr_gene.csv", header = FALSE, sep = "\t")
+colnames(chr_gene) = c("chr", "type", "start", "end", "strand", "gene_id", "gene")
+unique_chr_gene = chr_gene %>% select(gene, chr) %>% distinct()
+unique_chr_gene_count = data.frame(table(unique_chr_gene$chr))
+unique_chr_gene_count$chr = as.numeric(gsub("\\D", "", unique_chr_gene_count$Var1))
+
+## potential m6A sites (pre prob filter)
+prefilter_merge_rep1_rep2 = merge(max_rep1_all_alt_ref_und, max_rep2_all_alt_ref_und, by = c("gene", "transcript_position"))
+chr_pre_filter = unique_chr_gene[unique_chr_gene$gene %in% unique(prefilter_merge_rep1_rep2$gene), ]
+chr_pre_filter_count = data.frame(table(chr_pre_filter$chr))
+chr_pre_filter_count$chr = as.numeric(gsub("\\D", "", chr_pre_filter_count$Var1))
+
+## m6A sites (prob >0.85)
+chr_prob85 = unique_chr_gene[unique_chr_gene$gene %in% unique(merge_prob85$gene), ]
+chr_prob85_count = data.frame(table(chr_prob85$chr))
+
+chr_prob85_count$chr = as.numeric(gsub("\\D", "", chr_prob85_count$Var1))
+
+
+## combine all
+## First, I will calculate frequencies of predicted methylation sites in chromosome. 
+## frequency (%) = (number of genes predicted from m6Anet, no prob filter )/ (total number of genes in the chromosome) *100
+potential_m6A_entire_count = merge(chr_pre_filter_count[c(1:19),c("Freq", "chr")], unique_chr_gene_count[c(1:19),c("Freq", "chr")], by = "chr" )
+colnames(potential_m6A_entire_count) = c("chr", "all_m6A", "all")
+potential_m6A_entire_count$frequency = (potential_m6A_entire_count$all_m6A / potential_m6A_entire_count$all) *100
+
+potential_m6A_entire_count$type = "entire_chr_freq"
+
+## Second, I count the number of m6A sites. 
+## frequency (%) = (number of m6A site, prob>0.85 /number of genes predicted from m6Anet, no prob filter  ) * ( (number of genes predicted from m6Anet, no prob filter )/ (total number of genes in the chromosome) ) *100
+## This is equal to following calcutaion: 
+## frequency (%) = (number of m6A site, prob>0.85 / (total number of genes in the chromosome) ) *100
+
+m6A_entire_count = merge(chr_prob85_count[c(1:19),c("Freq", "chr")],  unique_chr_gene_count[c(1:19),c("Freq", "chr")], by = "chr" )
+colnames(m6A_entire_count) = c("chr", "m6A_prob85", "all")
+m6A_entire_count$frequency = ((m6A_entire_count$m6A_prob85 / m6A_entire_count$all) )*100
+
+m6A_entire_count$type = "m6A85_chr_freq"
+
+## conbind two data frames 
+ALL_chr_gene_count = rbind(potential_m6A_entire_count[,c("chr","frequency", "type")], m6A_entire_count[,c("chr","frequency", "type")])
+
+## plot
+ggplot(ALL_chr_gene_count,  aes( x=chr, y= frequency, fill = type ) ) +
+    geom_bar(stat="identity", position="dodge") +
+    theme_classic() + 
+    theme(axis.text.x=element_text(angle = 90, hjust = 0),)  + 
+    labs(title="frequency of m6A sites in each chromosome",
+        x ="chromosome", y = "frequency (%)") + 
+    scale_x_discrete(limit = c(1:19)) +
+    scale_fill_manual(values=c("gray", "#E69F00"))
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/01_QC/QC_chromosome_all.pdf", width = 5, height = 3)
+  
+
+
+```
+
+### SNPs on DRACH motif 
+```{r}
+### entire vcf file 
+mouse_vcf_snp_pre = read.csv("/Users/dayeapark/Desktop/Analysis.nosync/Reference/mouse/N_masked/transcriptomic_variants.vcf", header = FALSE, sep = "\t")
+
+mouse_vcf_snp_pre$gene = sapply(mouse_vcf_snp_pre$V1, rename_default)
+mouse_vcf_snp = mouse_vcf_snp_pre[-1, c(6,2,3,4)]
+colnames(mouse_vcf_snp) = c("gene", "transcript_pos", "REF", "ALT")
+
+
+SNP_mark <- function(df, pos_num, mark) {
+  df$transcript_pos = df$transcript_position + pos_num
+  site_mark <- merge(mouse_vcf_snp, df, by = c("gene", "transcript_pos"))
+  
+  if (nrow(site_mark) > 0 ) { site_mark$SNP_pos = mark}
+  
+  return(site_mark)
+}
+
+merge_prob85_SNP = rbind(SNP_mark(merge_prob85, (-1), "D_site"),
+                         SNP_mark(merge_prob85, 0, "R_site"),
+                         SNP_mark(merge_prob85, 1, "A_site"),
+                         SNP_mark(merge_prob85, 2, "C_site"),
+                         SNP_mark(merge_prob85, 3, "H_site") )
+
+
+DRACH_SNP_pre = data.frame(table(merge_prob85_SNP$SNP_pos))
+C_site = data.frame(Var1 = "C_site", Freq=0)
+DRACH_SNP = rbind(DRACH_SNP_pre,C_site)
+
+DRACH_SNP$order <- factor(DRACH_SNP$Var1, levels = c("D_site", "R_site", "A_site", "C_site", "H_site")) # Change ordering manually
+
+ggplot(DRACH_SNP , 
+        aes(x = order, y = Freq)) + 
+        geom_bar(stat = "identity", fill = "skyblue") +
+        theme_classic() +
+       theme(axis.text.x=element_text(angle = 90, hjust = 0))
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/01_QC/QC_DRACH_SNP.pdf", width = 5, height = 3)
+
+
+```
+
+###########################################################################
+## long-read and shortread correlations (supplementary Fig 2A)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/ASE_AST/mESC_ribo_rna_nor.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/longread_rep1_all.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/longread_rep2_all.Rdata")
+
+
+longread_merge = merge(longread_rep1_all[,c(1,3)], longread_rep2_all[,c(1,3)], by = "gene")
+short_long_merge = merge(mESC_ribo_rna_nor[,c(1,4,5)], longread_merge, by = "gene")
+colnames(short_long_merge) = c("gene", "long_rep1", "long_rep2", "short_rep1", "short_rep2")
+
+cor_df_long_short <- cor(short_long_merge[,-1], method = "spearman")
+
+heatmap_long_short = melt(cor_df_long_short, na.rm = FALSE )
+
+ggplot(heatmap_long_short, aes(x = Var1, y = Var2, fill = value)) +
+  geom_raster() + 
+  scale_fill_gradient(high = "darkblue", low = "white",
+                      limit = c(0.7,0.988)) +
+  theme_minimal() + 
+  geom_text(aes(label=round(value,3) ), size=3)
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supfig2A_mouse_long_short.pdf", width = 5, height = 3)
+
+```
+

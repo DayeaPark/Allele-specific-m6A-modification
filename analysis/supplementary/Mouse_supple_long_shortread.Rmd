@@ -1,0 +1,227 @@
+---
+title: "Mouse supplementary fig (longread vs shortread)"
+date: 03-02-2024
+---
+
+
+## load data 
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep1_all_alt_ref_und.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep2_all_alt_ref_und.Rdata")
+
+# merged prob85
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata/merge_prob85.Rdata")
+
+## raw read count 
+### shortread count mean 20,727,156
+#shortread mESC rep1: 20,364,418
+#shortread mESC rep2: 21,089,893
+### longread count mean 2264938
+#longread mESC rep1: 2,323,186
+#longread mESC rep2: 2,206,690
+
+```
+
+## shortread and long-read counts 
+
+### shortread count mean 20,727,156
+shortread mESC rep1: 20,364,418
+shortread mESC rep2: 21,089,893
+
+### shortread, Total number of mapped read 
+shortread mESC rep1: 17,330,215
+shortread mESC rep1: 
+
+### shortread detected these number of informative SNPs 
+shortread mESC rep1:  1,44,641
+shortread mESC rep2:  
+
+### shortread, the SNPs were in these number of transcript.
+shortread mESC rep1:  12,927
+shortread mESC rep2: 
+
+
+### longread count mean 2264938
+longread mESC rep1: 2,323,186
+longread mESC rep2: 2,206,690
+
+### longtread, Total number of mapped read 
+shortread mESC rep1: 1,956,725
+shortread mESC rep1: 1,531,010
+
+### longread detected these number of informative SNPs 
+longread mESC rep1: 135,380
+longread mESC rep2: 134,585
+
+### longread, the SNPs were in these number of transcript.
+longread mESC rep1: 12,033
+longread mESC rep2: 11,855
+
+
+```{r}
+short_read_rep1_log = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/shortread_rep1_snp_all.txt.gz", sep = " ", header = FALSE )
+short_read_rep2_log = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/shortread_rep2_snp_all.txt.gz", sep = " ", header = FALSE )
+
+sum(short_read_rep1_log$V1, short_read_rep1_log$V2)
+sum(short_read_rep2_log$V1, short_read_rep2_log$V2)
+
+```
+## longread vs shortread paternal ratio 
+```{r}
+
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/long_short_merge.Rdata")
+
+long_short_rep1 <- long_short_merge[,c("long_rep1_pat_ratio","short_rep1_pat_ratio")]
+long_short_rep2 <- long_short_merge[,c("long_rep2_pat_ratio","short_rep2_pat_ratio")]
+long_short_rep1$rep  <- "rep1"
+long_short_rep2$rep  <- "rep2"
+colnames(long_short_rep1) = colnames(long_short_rep2) =c("longread", "shortread")
+
+pat_ratio_long_short <- rbind(long_short_rep1, long_short_rep2)
+
+pat_ratio_long <- long_short_merge[,c("long_rep1_pat_ratio","long_rep2_pat_ratio")]
+pat_ratio_short <- long_short_merge[,c("short_rep1_pat_ratio", "short_rep2_pat_ratio")] 
+  
+scatter_plot_correlation <- function(df, x_name, y_name, cor_method,smooth_method) {
+  colnames(df) = c("V1", "V2")
+  
+  cor_spearman = cor(df , method = cor_method)
+  annotation_condition = grobTree(textGrob(paste("Spearman Correlation : ", round(cor_spearman[1,2],4) ),
+                                 x = 0.05, y = 0.98, hjust = 0,
+                                 gp = gpar(col = "red", fontsize = 11, fontface = "bold")))
+
+  plot <- ggplot( df, aes( x= V1, y= V2 )) +
+              geom_point(size = 0.5, shape = 19,  color= "black") +
+              #stat_cor(method ="spearman") + 
+              theme_classic() +
+              geom_smooth(method = smooth_method, se = FALSE) + 
+              annotation_custom(annotation_condition) + 
+              scale_x_continuous(name = x_name) +
+              scale_y_continuous(name = y_name)
+    
+    return(plot)
+}
+
+
+ggarrange(scatter_plot_correlation(pat_ratio_long_short[,c(1,2)], "long_read", "short_read", "spearman", "lm"),
+scatter_plot_correlation(pat_ratio_long, "long_read_rep1","long_read_rep2",  "spearman", "lm"),
+scatter_plot_correlation(pat_ratio_short, "short_read_rep1","short_read_rep2", "spearman", "lm"),
+nrow = 3, ncol =  1) 
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supple2_cor_long_short.pdf", width = 4, height = 9)
+
+```
+
+###########################################################################
+## allele reference bias (longread, supplementary Fig 12)
+## Load Rdata. 
+```{r}
+##masked
+load( "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep1_all_alt_ref_und.Rdata")
+load(  "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep2_all_alt_ref_und.Rdata")
+load(  "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_mettl3_all_alt_ref_und.Rdata")
+
+## unmasked (it is needed for Group1 clusterization)
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep1_all_alt_ref_und_unmasked.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/max_rep2_all_alt_ref_und_unmasked.Rdata")
+
+## vcf file
+mouse_vcf_snp_pre = read.csv("/Users/dayeapark/Desktop/Analysis.nosync/Reference/mouse/N_masked/transcriptomic_variants.vcf", header = FALSE, sep = "\t")
+
+mouse_vcf_snp_pre$gene = sapply(mouse_vcf_snp_pre$V1, rename_default)
+mouse_vcf_snp = mouse_vcf_snp_pre[-1, c(6,2,3,4)]
+colnames(mouse_vcf_snp) = c("gene", "transcript_pos","ALT", "REF")
+
+```
+
+## Longread paternal ratio
+## paternal ratio measured from long read (do not run.)
+```{r}
+ALT_rep1_alt_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_ALT_rep1_alt_snp2.csv", header = FALSE)
+ALT_rep1_ref_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_ALT_rep1_ref_snp2.csv", header = FALSE)
+REF_rep1_alt_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_REF_rep1_alt_snp2.csv", header = FALSE)
+REF_rep1_ref_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_REF_rep1_ref_snp2.csv", header = FALSE)
+
+ALT_rep2_alt_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_ALT_rep2_alt_snp2.csv", header = FALSE)
+ALT_rep2_ref_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_ALT_rep2_ref_snp2.csv", header = FALSE)
+REF_rep2_alt_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_REF_rep2_alt_snp2.csv", header = FALSE)
+REF_rep2_ref_longread_raw = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/unmasked_longread_count/unmasked_REF_rep2_ref_snp2.csv", header = FALSE)
+
+long_read_count_function <- function(df) { 
+    colnames(df) = c("transcript_id")
+    df$gene = sapply(df$transcript_id, rename_default )
+    df = df %>% group_by(gene) %>% summarise( n_count = n() )
+  return(df)
+}
+
+merge_alt_ref <- function(alt_df, ref_df) { 
+  alt_df_count = long_read_count_function(alt_df)
+  ref_df_count = long_read_count_function(ref_df)
+  merge_df = merge(alt_df_count, ref_df_count, by = "gene")
+  colnames(merge_df) = c("gene", "alt_count", "ref_count")
+  return(merge_df)
+}
+ALT_rep1_long_ASE_count = merge_alt_ref(ALT_rep1_alt_longread_raw, ALT_rep1_ref_longread_raw)
+ALT_rep2_long_ASE_count = merge_alt_ref(ALT_rep2_alt_longread_raw, ALT_rep2_ref_longread_raw)
+
+REF_rep1_long_ASE_count = merge_alt_ref(REF_rep1_alt_longread_raw, REF_rep1_ref_longread_raw)
+REF_rep2_long_ASE_count = merge_alt_ref(REF_rep2_alt_longread_raw, REF_rep2_ref_longread_raw)
+
+ALT_long_read_allele_count = merge(ALT_rep1_long_ASE_count, ALT_rep2_long_ASE_count, by = "gene")
+REF_long_read_allele_count = merge(REF_rep1_long_ASE_count, REF_rep2_long_ASE_count, by = "gene")
+
+colnames(ALT_long_read_allele_count) = colnames(REF_long_read_allele_count) =  c("gene", "rep1_alt", "rep1_ref", "rep2_alt", "rep2_ref")
+
+#save(ALT_long_read_allele_count, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/ALT_long_read_allele_count.Rdata")
+#save(REF_long_read_allele_count, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/REF_long_read_allele_count.Rdata")
+
+```
+
+## Longread paternal ratio
+```{r}
+
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/long_read_allele_count.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/ALT_long_read_allele_count.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/long_shortread/REF_long_read_allele_count.Rdata")
+
+## long-read 
+paternal_long_read <-function (df_allele_count) { 
+
+  LONG_pat_ratio = df_allele_count %>%
+                      group_by(gene) %>% 
+                      summarise( rep1_alt_sum = sum(rep1_alt),
+                                 rep1_ref_sum = sum(rep1_ref),
+                                 rep2_alt_sum = sum(rep2_alt),
+                                 rep2_ref_sum = sum(rep2_ref))
+  
+  LONG_pat_ratio$long_rep1_pat_ratio = LONG_pat_ratio$rep1_alt_sum / (LONG_pat_ratio$rep1_ref_sum + LONG_pat_ratio$rep1_alt_sum)
+  LONG_pat_ratio$long_rep2_pat_ratio = LONG_pat_ratio$rep2_alt_sum / (LONG_pat_ratio$rep2_ref_sum + LONG_pat_ratio$rep2_alt_sum)
+  LONG_pat_ratio$average = (LONG_pat_ratio$long_rep1_pat_ratio + LONG_pat_ratio$long_rep2_pat_ratio) /2
+  Longread_pat <- LONG_pat_ratio[,c(1,8)]
+  
+return(Longread_pat)
+}
+
+masked_pat <- paternal_long_read(long_read_allele_count)
+unmasked_ALT_pat <- paternal_long_read(ALT_long_read_allele_count)
+unmasked_REF_pat <- paternal_long_read(REF_long_read_allele_count)
+
+merge_all_two = merge(masked_pat, unmasked_ALT_pat, by = "gene", all = TRUE)
+merge_all_three = merge(merge_all_two, unmasked_REF_pat, by = "gene", all = TRUE)
+colnames(merge_all_three) = c("gene", "masked", "unmasked_ALT", "unmasked_REF")
+pat_ratio_melt = melt(merge_all_three, id = "gene")
+
+boxplot(merge_all_three$masked, merge_all_three$unmasked_ALT, merge_all_three$unmasked_REF, outline = FALSE)
+
+ggplot(pat_ratio_melt) + 
+  geom_boxplot( aes(x = variable, y = value), outlier.shape = NA) + 
+  theme_classic()
+  
+mean(masked_pat[!(is.na(masked_pat$average)),]$average )
+mean(unmasked_ALT_pat[!(is.na(unmasked_ALT_pat$average)),]$average)
+mean(unmasked_REF_pat[!(is.na(unmasked_REF_pat$average)),]$average)
+
+
+long_read_unmaked_ref = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/Usepython/pat_ratio_unmasked/longread_patratio_remove_noread.csv", header = TRUE)
+```
+

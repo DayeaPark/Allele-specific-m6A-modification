@@ -1,0 +1,254 @@
+---
+title: "R Notebook"
+output: Rmd
+---
+
+# mouse 
+transcript    		     21,568
+transcript in vcf      16,260
+
+number of SNPs		    210,004
+
+
+# human 
+transcript 			        19,913
+transcript in vcf		     8,891
+
+number of SNPs		      27,269	
+
+  18583 0|1
+   8667 1|0
+     11 1|2
+      8 2|1
+      
+
+# Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+
+# packages for plot 
+library("ggplot2")
+library("ggpubr")
+library("ggVennDiagram")
+library("pheatmap")
+library("gridExtra")
+library("grid")
+library("cowplot")
+
+library("ggbreak")
+library("patchwork")
+
+```
+## SNPs in mouse and human transcriptomes (supplementary Fig 9)
+```{r}
+mouse_vcf = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/reference/appris_mouse_transcript.vcf.txt", header = TRUE, sep = "\t"  )
+human_vcf = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/reference/appris_huamn_v44_transcript.vcf.txt", header = FALSE, sep = "\t" )
+colnames(mouse_vcf) =  colnames(human_vcf) = c("transcript_id", "transcript_pos","REF", "ALT")
+
+
+count_snp_function <- function (df_vcf, species) { 
+  df_vcf$gene = sapply(df_vcf$transcript_id, rename_default)
+  df_vcf$gene = unlist(strsplit(df_vcf$transcript_id, split = "[|]"))[6]
+  
+  snp_count_pre = data.frame (t(table(df_vcf$transcript_id)) )
+  snp_count = snp_count_pre[,c(2,3)]
+  
+  colnames(snp_count) = c("transcript_id", "snp_count")
+  
+  snp_count_freq = data.frame (t(table(snp_count$snp_count)) )
+  final_frequency_df = snp_count_freq[,c(2,3)]
+  colnames(final_frequency_df) = c("num_snps_per_transcript", "Freq")
+  
+  final_frequency_df$type = species
+  
+  return(final_frequency_df)
+}
+
+mouse_snp_count = count_snp_function(mouse_vcf, "mouse")
+human_snp_count = count_snp_function(human_vcf, "human")
+
+plot_df = rbind(mouse_snp_count[mouse_snp_count$num_snps_per_transcript %in% c(1:40),],
+                human_snp_count[human_snp_count$num_snps_per_transcript %in% c(1:40),])
+
+#plot_df = rbind(mouse_snp_count, human_snp_count)
+ggplot(plot_df,
+      aes(x = num_snps_per_transcript, y = Freq, fill = type)) + 
+      geom_bar(stat = "identity", position=position_dodge()) + 
+      scale_fill_manual(values=c("darkblue", "skyblue")) + 
+      theme_classic() +
+      theme(axis.text.x=element_text(angle = 90, hjust = 0)) 
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supple_mouse_human.pdf", width = 6, height = 3)
+
+
+
+```
+
+### total number of transcript and SNPs 
+```{r}
+
+transcript_num_table = data.frame(  speacies  = c("mouse", "human"), 
+                                    transcript = c(21568, 19913),
+                                    transcript_vcf = c(16260, 8891))
+
+total_num_SNP = data.frame(  speacies  = c("mouse", "human"), 
+                                    transcript = c(210004, 27269))
+
+plot_df_trascript = melt(transcript_num_table, id = "speacies")
+  
+  
+  
+trascript <- ggplot(plot_df_trascript,
+              aes(x = speacies, y = value, fill = variable)) + 
+              geom_bar(stat = "identity", position=position_dodge()) + 
+              scale_fill_manual(values=c("darkblue", "skyblue")) + 
+              theme_classic() +
+              theme(axis.text.x=element_text(angle = 90, hjust = 0),
+                legend.position = "none") 
+
+
+
+snp <- ggplot(total_num_SNP,
+          aes(x = speacies, y = transcript)) + 
+          geom_bar(stat = "identity", position=position_dodge()) + 
+          theme_classic() +
+          theme(axis.text.x=element_text(angle = 90, hjust = 0),
+                legend.position = "none")
+
+ggarrange(trascript, snp, nrow = 1)
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/supple_mouse_human_num.pdf", width = 6, height = 3)
+
+
+```
+# Comparison number of SNPs (in text information)
+### mouse 
+transcript    		     21,568
+transcript in vcf      16,260
+
+number of SNPs		    210,004
+
+
+### human 
+transcript 			        19,913
+transcript in vcf		     8,891
+
+number of SNPs		      27,269	
+
+  18583 0|1
+   8667 1|0
+     11 1|2
+      8 2|1
+
+# Comparison short-read and long-read SNPs count (in text , discussion)
+```{r}
+library(ggbreak)
+long_single_read <- read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/long_read_log.txt.gz", header = FALSE, sep = " ")
+short_single_read <- read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/shortread_rep1_snp_all.txt.gz", header = FALSE, sep = " ")
+
+colnames(long_single_read) = colnames(short_single_read) = c("alt_count", "ref_count", "no_match", "unknown", "SNP_no_count")
+
+long_single_read$total_snp_count = long_single_read$alt_count + long_single_read$ref_count
+short_single_read$total_snp_count = short_single_read$alt_count + short_single_read$ref_count
+
+short_single_read_filter = short_single_read[short_single_read$no_match == 0, ]
+
+max(long_single_read$total_snp_count)
+max(short_single_read_filter$total_snp_count)
+
+
+single_read_count_snp_function <- function (df_read, method) { 
+  df = df_read[df_read$total_snp_count > 0, ]
+  snp_count_pre = data.frame (t(table(df$total_snp_count)) )
+  snp_count = snp_count_pre[,c(2,3)]
+  colnames(snp_count) = c("num_snps_per_read", "Freq")
+  snp_count$method = method
+return(snp_count)
+}
+
+longread_snp_count = single_read_count_snp_function(long_single_read, "longread")
+shortread_snp_count = single_read_count_snp_function(short_single_read_filter, "shortread")
+
+
+single_read_plot_df = rbind(longread_snp_count, shortread_snp_count)
+complete_single_read_plot_df = complete(single_read_plot_df, num_snps_per_read, method)
+
+ggplot(complete_single_read_plot_df,
+      aes(x = num_snps_per_read, y = Freq, fill = method)) + 
+      geom_bar(stat = "identity", position = "dodge") + 
+      scale_fill_manual(values=c("darkblue", "skyblue")) + 
+      theme_classic() +
+      theme(axis.text.x=element_text(angle = 90, hjust = 0)) +
+      scale_y_cut(breaks=c(10, 200000), which=c(1, 2,3), scales=c(0.5,2,0.3)) 
+  
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/suplFig2_short_long_snp_singleread.pdf", width = 8, height = 3)
+
+## without break 
+complete_single_read_plot_df$Freq2 = complete_single_read_plot_df$Freq+1
+ggplot(complete_single_read_plot_df,
+      aes(x = num_snps_per_read, y = log(Freq2,2), fill = method)) + 
+      geom_bar(stat = "identity", position = "dodge") + 
+      scale_fill_manual(values=c("darkblue", "skyblue")) + 
+      theme_classic() +
+      theme(axis.text.x=element_text(angle = 90, hjust = 0)) 
+
+ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/suplFig2_short_long_snp_singleread_log.pdf", width = 8, height = 3)
+```
+
+## SNPs per transcript (longread)
+```{r}
+long_read_rep1_path <- "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/mESC_rep1_SNP_site_singleread.txt"
+long_read_rep1_path  <- "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/mESC_rep2_SNP_site_singleread.txt"
+
+#short_read_rep1_path <- "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/shortread_rep1_single_read.txt"
+short_read_rep1_path <- "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/new_shortread_rep1_single_read.txt"
+
+short_read_rep2_path  <- "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/05_LongShortseq_ASE/short_long_read_SNP_count_single_read/shortread_rep2_single_read.txt"
+
+
+## it takes some time.. 
+python_read_snp_count <- function (filepath) {
+  long_SNP_table <- read.csv(filepath, header = FALSE, sep = " ")
+  
+  colnames(long_SNP_table) = c("transcript_id", "pos")
+  long_SNP_table$gene = sapply(long_SNP_table$transcript_id, rename_default)
+  long_SNP_table$gene_pos = paste0(long_SNP_table$gene, "_", long_SNP_table$pos)
+  
+  return(paste ( "Total SNP counts:", length(unique(long_SNP_table$gene_pos) ),
+                 ", in transcript count:", length(unique(long_SNP_table$gene) )) )
+
+}
+
+python_read_snp_count(long_read_rep1_path)  # 135,380 SNPs in 12,033 transctipt
+python_read_snp_count(long_read_rep1_path)  # 134,585 SNPs in 11,855 transcript
+
+python_read_snp_count(short_read_rep1_path)  # 58,090 SNPs in 10,276 transctipt
+python_read_snp_count(short_read_rep2_path)  # 49,824 SNPs in 9,368 transcript
+# "Total SNP counts: 144641 , in transcript count: 12927"
+
+## mapped read counts 
+
+```
+
+## shortread snp count 
+```{r}
+shortread_rep1 = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/05_mESC/RNAseq_mESC_Dif_SNP_count/snp_count_mESC_Dif_vcf_csv/snp_count_mESC_non_A_all.csv", header = TRUE, sep = "\t")
+shortread_rep2 = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/05_mESC/RNAseq_mESC_Dif_SNP_count/snp_count_mESC_Dif_vcf_csv/snp_count_mESC_non_B_all.csv", header = TRUE, sep = "\t")
+
+shortread_rep1$sum = shortread_rep1$A + shortread_rep1$C + shortread_rep1$T + shortread_rep1$G
+shortread_rep2$sum = shortread_rep2$A + shortread_rep2$C + shortread_rep2$T + shortread_rep2$G
+
+dim(shortread_rep1[shortread_rep1$sum > 0, ])  # 150817
+dim(shortread_rep2[shortread_rep2$sum > 0, ])  # 132106
+
+length(unique(shortread_rep1[shortread_rep1$sum > 0, ]$transcript)) # 13126
+length(unique(shortread_rep1[shortread_rep2$sum > 0, ]$transcript)) # 12304
+
+
+
+```

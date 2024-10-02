@@ -1,0 +1,281 @@
+---
+title: "Chromosome"
+author: "DP"
+date: "2023-06-14"
+output: html_document
+---
+
+## Install
+```{r}
+library("reshape2")
+library("ggplot2")
+library("data.table")
+library("gridExtra")
+library("dplyr")
+library("stringr")
+library("tidyverse")
+library("palmerpenguins")
+library("data.table")
+## Rename
+## Default renaming
+rename_default <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[6])
+}
+
+
+rename_default2 <- function(names){
+  return(unlist(strsplit(names, split = "[.]"))[1])
+}
+
+rename_default3 <- function(names){
+  return(unlist(strsplit(names, split = "[-]"))[1])
+}
+#m6Anet_mESC$Gene = sapply(m6Anet_mESC$transcript_id, rename_default)
+```
+
+
+## Gene position on Chromosome
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/step6_prob85.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/mouse_ASM_mod.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+
+```
+
+## R script from git hub 
+https://github.com/mrtnj/rstuff/blob/master/gene_position_plot.R
+https://www.r-bloggers.com/2021/07/a-plot-of-genes-on-chromosomes/
+
+```{r}
+## Plot showing the location of a few genomes on chromosomes
+
+library(httr)
+library(jsonlite)
+library(ggplot2)
+library(ggrepel)
+library(magrittr)
+library(purrr)
+
+
+## Get an endpoint from the Ensembl REST api and return parsed JSON
+
+get_from_rest_api <- function(endpoint_string,
+                              server = "https://rest.ensembl.org/") {
+  rest <- GET(paste(server, endpoint_string, sep = ""),
+              content_type("application/json"))
+  
+  stop_for_status(rest)
+  
+  fromJSON(toJSON(content(rest)))
+}
+
+
+## Get chromosomes sizes from the Ensembl REST API
+
+get_chromosome_sizes_from_ensembl <- function(species) {
+
+  json <- get_from_rest_api(paste("info/assembly/", species, sep = ""))
+
+  data.frame(name = as.character(json$top_level_region$name),
+             length = as.numeric(json$top_level_region$length),
+             stringsAsFactors = FALSE)
+}
+
+
+## Get coordinates from Ensembl ids
+
+get_coordinates_from_ensembl <- function(ensembl_ids) {
+ 
+  map_dfr(ensembl_ids,
+                  function(ei) {
+                    json <- get_from_rest_api(paste("lookup/id/", ei, sep = ""))
+  
+                    data.frame(position = (json$start + json$end)/2,
+                               chr = json$seq_region_name,
+                               display_name = json$display_name,
+                               stringsAsFactors = FALSE)
+                  })
+}
+```
+
+## plot function (modified)
+```{r}
+# How to make mouse_chr_length.csv 
+
+## include dot, exclude names. 
+
+## Chromosome information
+chr_num_mouse = c(1:19, "X", "Y")
+
+chr_gene = read.table("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/mouse_reference/mm10/chr_gene.csv", header = FALSE, sep = "\t")
+colnames(chr_gene) = c("chr", "type", "start", "end", "strand", "gene_id", "gene")
+
+chr_gene$ensembl_id = sapply(chr_gene$gene_id, rename_default2)
+chr_gene_noXY = chr_gene[!(chr_gene$chr == "chrX" | chr_gene$chr == "chrY" | chr_gene$chr == "chrM"),]
+chr_sizes <- get_chromosome_sizes_from_ensembl(species = "mus_musculus")
+
+
+#write.csv(chr_sizes, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/m6A_R/02_ASM/mouse_chr_length.csv", quote = FALSE, row.names = FALSE)
+```
+
+## [Run this parts] Load Function 
+```{r}
+chr_length = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/03_m6A_R/02_ASM/mouse_chr_length.csv", sep = ",", header = TRUE)
+## chromosome plot functions 
+plot_df_generation <- function(coordinates,
+                       chromosome_sizes, color_pick) {
+
+  ## Restrict to chromosomes that are in data  
+  chrs_in_data <- chromosome_sizes[chromosome_sizes$name %in% chr_num_mouse,]
+  chr_order <- order(as.numeric(chrs_in_data$name))
+  
+  ggplot() +
+    geom_linerange(aes(x = name,
+                       ymin = 1,
+                       ymax = length/1e6),
+                   size = 2,
+                   colour = "grey",
+                   data = chrs_in_data) +
+    geom_point(color = color_pick,
+               aes(x = chr,
+                        y = position/1e6),
+               nudge_x = 0.33,
+               data = coordinates,
+               size = 1.5) +
+    #scale_y_reverse() +
+    ## Fix ordering of chromosomes on x-axis
+    scale_x_discrete(limits = chrs_in_data$name[chr_order],
+                     labels = chrs_in_data$name[chr_order]) +
+    scale_y_reverse() +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    xlab("Chromosome") +
+    ylab("Position (Mbp)")
+  
+}
+
+
+
+chromosome_plot <- function(gene_list, color_select) {
+  #ensembl_genes <- chr_gene[chr_gene$gene %in% gene_list, ]$gene_id
+  ensembl_genes <- chr_gene[chr_gene$gene %in% gene_list, ]$ensembl_id
+  coords <- get_coordinates_from_ensembl(ensembl_genes)
+  plot_genes_test_noname <- plot_df_generation(coords, chr_sizes, color_select)
+  return(plot_genes_test_noname)
+}
+
+### plot for maternally and pateranlly biased m6A genes 
+plot_df_generation_type <- function(coordinates,
+                       chromosome_sizes, color_pick) {
+
+  ## Restrict to chromosomes that are in data  
+  chrs_in_data <- chromosome_sizes[chromosome_sizes$name %in% chr_num_mouse,]
+  chr_order <- order(as.numeric(chrs_in_data$name))
+  
+  ggplot() +
+    geom_linerange(aes(x = name,
+                       ymin = 1,
+                       ymax = length/1e6),
+                   size = 2,
+                   colour = "grey",
+                   data = chrs_in_data) +
+    geom_point(data = coordinates, 
+               aes(x = chr,
+                    y = position/1e6,
+                   color = type),
+               size = 1.5) +
+    scale_colour_manual(values=c("red", "blue")) +
+    scale_y_reverse() +
+    ## Fix ordering of chromosomes on x-axis
+    scale_x_discrete(limits = chrs_in_data$name[chr_order],
+                     labels = chrs_in_data$name[chr_order]) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    xlab("Chromosome") +
+    ylab("Position (Mbp)")
+  
+}
+
+
+
+
+```
+
+
+### Plotting
+```{r}
+ASM_all_chromosome <- chromosome_plot(mouse_ASM_mod$gene, "black")
+
+#pdf("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/02_ASM/ASM_chromosome.pdf", width = 5, height = 4)
+ASM_all_chromosome
+#dev.off()
+
+```
+
+## Random genes 
+```{r}
+random_gene = c(sample(unique(step6_prob85$gene), 70))
+random_gene <- chromosome_plot(random_gene, "magenta")
+
+#pdf("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/02_ASE/ASE_chromosome.pdf", width = 6, height = 5)
+random_gene_chromosome
+#dev.off()
+
+
+```
+
+
+### Maternal and Paternal biased methylated genes (in a plot)
+## Mouse centromeres are located on the end of chromosomes 
+https://www.researchgate.net/figure/Sizes-and-gene-densities-of-mouse-a-and-human-b-chromosomes-The-length-of_fig1_7432367
+https://www.researchgate.net/publication/12024272_The_battle_of_two_genomes_genetics_of_bacterial_hostpathogen_interactions_in_mice
+
+
+```{r}
+B6_biased_m6A = unique(mouse_ASM_mod[mouse_ASM_mod$rep1_ref_mod_ratio > mouse_ASM_mod$rep1_alt_mod_ratio,]$gene)
+CAST_biased_m6A = unique(mouse_ASM_mod[mouse_ASM_mod$rep1_ref_mod_ratio < mouse_ASM_mod$rep1_alt_mod_ratio,]$gene)
+
+B6_ensembl_genes <- chr_gene[chr_gene$gene %in% B6_biased_m6A, ]$ensembl_id
+B6_coords <- get_coordinates_from_ensembl(B6_ensembl_genes)
+
+CAST_ensembl_genes <- chr_gene[chr_gene$gene %in% CAST_biased_m6A, ]$ensembl_id
+CAST_coords <- get_coordinates_from_ensembl(CAST_ensembl_genes)
+
+B6_coords$type = "B6_biased"
+CAST_coords$type = "CAST_biased"
+
+BIAS_coords = rbind(B6_coords, CAST_coords)
+
+BIAS_chromosome <- plot_df_generation_type(BIAS_coords, chr_sizes)
+
+#pdf("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/chromosome_biased_m6A.pdf", width = 6, height = 4)
+BIAS_chromosome
+#dev.off()
+
+```
+## Group 1 and 2 
+```{r}
+group1_ASM <- unique(ASM_5mer[ASM_5mer$ASM_group == "group1", ]$gene)
+group2_ASM <- unique(ASM_5mer[ASM_5mer$ASM_group == "group2", ]$gene)
+
+group1_ensembl_genes <- chr_gene[chr_gene$gene %in% group1_ASM, ]$ensembl_id
+group1_coords <- get_coordinates_from_ensembl(group1_ensembl_genes)
+
+group2_ensembl_genes <- chr_gene[chr_gene$gene %in% group2_ASM, ]$ensembl_id
+group2_coords <- get_coordinates_from_ensembl(group2_ensembl_genes)
+
+group1_coords$type = "group1"
+group2_coords$type = "group2"
+
+group_coords = rbind(group1_coords, group2_coords)
+
+group_chromosome <- plot_df_generation_type(group_coords, chr_sizes)
+
+#pdf("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/chromosome_group.pdf", width = 6, height = 4)
+group_chromosome
+#dev.off()
+`1
+
+
+
+```

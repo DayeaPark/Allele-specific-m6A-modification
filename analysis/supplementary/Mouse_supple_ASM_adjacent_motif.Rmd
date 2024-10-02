@@ -1,0 +1,525 @@
+---
+title: "m6A_site_motif_SNP"
+author: "DP"
+date: "2023-10-10"
+output: html_document
+---
+## ggplot color 
+https://r-graph-gallery.com/ggplot2-color.html
+https://derekogle.com/NCGraphing/resources/colors
+## Load packages
+```{r}
+library("reshape2")
+library("data.table")
+library("dplyr")
+library("stringr")
+library("seqinr") 
+library("tidyverse")
+
+# packages for plot 
+library("ggplot2")
+library("ggpubr")
+library("pheatmap")
+library("gridExtra")
+library("grid")
+library("cowplot")
+library("ggseqlogo")
+
+
+## Default renaming
+rename_default <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[6])
+}
+
+rename_default_5utr <- function(names){
+  pre = unlist(strsplit(names, split = "[|]"))[8] 
+  return(unlist(strsplit(pre, split = "[-]"))[2] )
+}
+
+rename_default_cds <- function(names){
+  pre = unlist(strsplit(names, split = "[|]"))[9] 
+  return(unlist(strsplit(pre, split = "[-]"))[2] )
+
+}
+
+rename_default_3utr <- function(names){
+  return(unlist(strsplit(names, split = "[|]"))[7] )
+
+}
+
+```
+
+### Load data 
+```{r}
+
+
+## filtered m6A sites
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/step6_prob85.Rdata")
+
+## ASM
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/mouse_ASM.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/mouse_ASM_mod.Rdata")
+
+
+step6_prob85$Gene = paste0(step6_prob85$gene, "_", step6_prob85$transcript_position)
+```
+
+## mouse reference sequences
+```{r}
+mouse_transcript_masked = readLines("/Users/dayeapark/Desktop/Analysis.nosync/Reference/mouse/variant_masked_mouse_transcriptome_editLine.fa") 
+mouse_ALT_unmasked = readLines("/Users/dayeapark/Desktop/Analysis.nosync/Reference/mouse/N_masked/Each_allell_fa/ALT_variant_masked_mouse_transcriptome_editLine.fa")
+mouse_REF_unmasked = readLines("/Users/dayeapark/Desktop/Analysis.nosync/Reference/mouse/N_masked/Each_allell_fa/REF_variant_masked_mouse_transcriptome_editLine.fa")
+
+line_to_table <-function (df) {
+  gene_lines <- seq(1, length(df)-1, by=2)
+  sequence_lines <- seq(2, length(df)-1, by=2)
+  
+  mouse_transcript_df <- data.frame( transcript_id = df[gene_lines], sequence = df[sequence_lines] )
+  mouse_transcript_df$gene = sapply(mouse_transcript_df$transcript_id, rename_default)
+  
+  return(mouse_transcript_df)
+}
+
+## reference sequences 
+masked_transcript_seq = line_to_table(mouse_transcript_masked)
+unmasked_ALT_seq = line_to_table(mouse_ALT_unmasked)
+unmasked_REF_seq = line_to_table(mouse_REF_unmasked)
+
+
+```
+
+##########################################################################################
+### SNPs on DRACH motif functions
+```{r}
+## SNP search on motif 
+SNP_mark <- function(df, pos_num, mark) {
+  df$transcript_pos = df$transcript_position + pos_num
+  site_mark <- merge(mouse_vcf_snp, df, by = c("gene", "transcript_pos"))
+  
+  if (nrow(site_mark) > 0 ) { site_mark$SNP_pos = mark}
+  
+  return(site_mark)
+}
+
+
+## ggmotif, https://omarwagih.github.io/ggseqlogo/
+## merge sequence from reference files. 
+add_entire_sequence <- function (df)  { 
+for (i in 1:nrow(df)) {
+  df$masked_seq[i] = masked_transcript_seq[masked_transcript_seq$gene == df$gene[i],]$sequence
+  df$ALT_seq[i] = unmasked_ALT_seq[unmasked_ALT_seq$gene == df$gene[i],]$sequence
+  df$REF_seq[i] = unmasked_REF_seq[unmasked_REF_seq$gene == df$gene[i],]$sequence
+}
+return(df)
+}
+
+## kmer included data frame 
+motif_seq_search <-function (df, adding_num_start, adding_num_end, kmer_num) {
+    df_motif = add_entire_sequence(df)
+    df_motif$start_pos = df_motif$transcript_position + adding_num_start
+    df_motif$end_pos = df_motif$transcript_position + adding_num_end
+      
+    df_motif$masked_motif_seq = substr(df_motif$masked_seq, df_motif$start_pos, df_motif$end_pos)
+    df_motif$ALT_motif_seq = substr(df_motif$ALT_seq, df_motif$start_pos, df_motif$end_pos)
+    df_motif$REF_motif_seq = substr(df_motif$REF_seq, df_motif$start_pos, df_motif$end_pos)
+      
+    nuc_motif_search = df_motif[,c("gene", "transcript_position", "Gene", 
+                            "rep1_alt_mod_ratio", "rep1_ref_mod_ratio", "rep2_alt_mod_ratio", "rep2_ref_mod_ratio", 
+                            "masked_motif_seq", "ALT_motif_seq", "REF_motif_seq")]
+    
+    final_df <- nuc_motif_search[nchar(nuc_motif_search$masked_motif_seq ) == kmer_num, ]
+    final_df$alt_mod_ratio_mean = (final_df$rep1_alt_mod_ratio + final_df$rep2_alt_mod_ratio)/2
+    final_df$ref_mod_ratio_mean = (final_df$rep1_ref_mod_ratio + final_df$rep2_ref_mod_ratio)/2
+
+  return(final_df) 
+}
+
+
+## SNP analysis functions (SNP pos)
+
+Search_for_SNP_pos_mouse <- function (df, ASM_list) { 
+    
+    add_line <- data.frame(gene = NA, transcript_position= NA, Gene= NA, 
+                               rep1_alt_mod_ratio = NA, rep1_ref_mod_ratio = NA, rep2_alt_mod_ratio = NA, rep2_ref_mod_ratio= NA,
+                               masked_motif_seq = NA, ALT_motif_seq = NA, REF_motif_seq = NA, 
+                               alt_mod_ratio_mean = NA, ref_mod_ratio_mean = NA, SNP_pos = NA, SNP_nuc_highm6A = NA, SNP_nuc_lowm6A = NA)
+    for (i in 1:nrow(df)) { 
+      if (str_count(df$masked_motif_seq[i], pattern ="N") == 0 ){
+        df$SNP_pos[i] = "none" 
+        df$SNP_nuc_highm6A[i] = "none" 
+        df$SNP_nuc_lowm6A[i] = "none" 
+      } else if (str_count(df$masked_motif_seq[i], pattern ="N") == 1 ){
+        for (pos_num in 1:nchar(df$masked_motif_seq[i])) { 
+          if(substr(df$masked_motif_seq[i], pos_num, pos_num) == "N" ) {
+            df$SNP_pos[i] = pos_num 
+            
+            if (df$alt_mod_ratio_mean[i] > df$ref_mod_ratio_mean[i]) { 
+            df$SNP_nuc_highm6A[i] = substr(df$ALT_motif_seq[i], pos_num, pos_num)
+            df$SNP_nuc_lowm6A[i] = substr(df$REF_motif_seq[i], pos_num, pos_num)
+            } else if (df$alt_mod_ratio_mean[i] < df$ref_mod_ratio_mean[i]) { 
+            df$SNP_nuc_highm6A[i] = substr(df$REF_motif_seq[i], pos_num, pos_num)
+            df$SNP_nuc_lowm6A[i] = substr(df$ALT_motif_seq[i], pos_num, pos_num)}
+          }}
+          
+      } else if (str_count(df$masked_motif_seq[i], pattern ="N") > 1 ){
+        add_line_new = df %>% slice(rep(i, each = str_count(df$masked_motif_seq[i], pattern ="N")))  
+        list_pos = data.frame(str_locate_all(pattern ='N', df$masked_motif_seq[i]))
+        for (snp_n in 1:nrow(add_line_new)) {
+          add_line_new$SNP_pos[snp_n] = list_pos[snp_n,1]
+
+            if (add_line_new$alt_mod_ratio_mean[snp_n] > add_line_new$ref_mod_ratio_mean[snp_n]) { 
+            add_line_new$SNP_nuc_highm6A[snp_n] = substr(add_line_new$ALT_motif_seq[snp_n], list_pos[snp_n,1], list_pos[snp_n,1] )
+            add_line_new$SNP_nuc_lowm6A[snp_n] = substr(add_line_new$REF_motif_seq[snp_n], list_pos[snp_n,1], list_pos[snp_n,1] )
+            } else if (add_line_new$alt_mod_ratio_mean[snp_n] < add_line_new$ref_mod_ratio_mean[snp_n]) { 
+            add_line_new$SNP_nuc_highm6A[snp_n] = substr(add_line_new$REF_motif_seq[snp_n], list_pos[snp_n,1], list_pos[snp_n,1] )
+            add_line_new$SNP_nuc_lowm6A[snp_n] = substr(add_line_new$ALT_motif_seq[snp_n], list_pos[snp_n,1], list_pos[snp_n,1] )
+            }} 
+        add_line = rbind(add_line, add_line_new) }
+    }
+    
+    final_df = na.omit (rbind(add_line, df[!(df$Gene %in% add_line$Gene), ]) ) 
+    final_df$ASM_type = "none"
+    final_df[final_df$Gene %in% mouse_ASM$Gene,]$ASM_type = "ASM"
+      
+  return(final_df)
+}
+
+
+```
+
+
+## SNPs on  +/-1 or +/-2 DRACH motif 
+We observed SNPs near DRAFH motif shows specific nucleotide (-1 site >> "C") in cluster 2 ASM genes. 
+Therefore, I will search the nucleotides of + or -1 DRACH motif and compare modification. 
+
+### 9-mers: SNP Analysis 
+```{r}
+## all prob85: 9-mer 
+mouse_prob85_9mer = motif_seq_search( step6_prob85, (-3), 5, 9 ) # D-2 site to H+2 site >> 9 mer
+
+## including non-SNP nucleotides (9mer)
+mouse_prob85_9mer_snp_pos_ASM = Search_for_SNP_pos_mouse(mouse_prob85_9mer, mouse_ASM$Gene)
+
+## ASM sites
+ASM_seq_SNP_included= mouse_prob85_9mer_snp_pos_ASM[mouse_prob85_9mer_snp_pos_ASM$Gene %in% mouse_ASM$Gene, ]
+
+```
+
+### plot for ASM  (Supplementary fig 8A)
+```{r}
+ggplot_logo <- function (df, selec_column, title) {
+  ggplot() + 
+  #geom_logo( df %>% select (selec_column) , method = 'prob') + 
+  geom_logo( df %>% select (selec_column) , method = 'bit') + 
+  theme_logo() +
+  ggtitle(title) + 
+  theme_classic() +
+  theme(plot.title = element_text(size = 10),
+        legend.position = "none")
+  
+
+}
+
+select_mout_ASM <- ASM_seq_SNP_included[,c("Gene", "masked_motif_seq")]
+select_mout_ASM$T_to_U  = gsub("T","U", select_mout_ASM$masked_motif_seq) 
+ggplot_logo(ASM_seq_SNP_included, "masked_motif_seq", "sigASM:9-mer masked seq")
+ggplot_logo(ASM_seq_SNP_included[ASM_seq_SNP_included$ASM_type == "ASM" & 
+                                ASM_seq_SNP_included$Gene %in% group2$Gene , ], "masked_motif_seq", "sigASM:9-mer masked seq")
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/mouse_ASM_logo_T_to_U.pdf", width = 8, height = 4)
+
+T_changed = ASM_seq_SNP_included[ASM_seq_SNP_included$ASM_type == "ASM" & 
+                                ASM_seq_SNP_included$Gene %in% group2$Gene , ]$masked_motif_seq
+
+ggseqlogo( T_changed, seq_type='dna', namespace = c("N","A", "U", "G", "C") )
+ggseqlogo( U_changed, seq_type='rna',namespace = "NAUCG" )
+ggseqlogo( U_changed, seq_type='aa' )
+
+ggseqlogo( U_changed, seq_type='other' , namespace = c("N","A", "U", "G", "C"))
+
+
+```
+
+## motif preferences: find 5mer sequences [Do not run] (preparation for supplementary fig 7)
+```{r}
+mouse_prob85_5mer = motif_seq_search( step6_prob85, (-1), 3, 5 ) 
+
+ASM_5mer = mouse_prob85_5mer[mouse_prob85_5mer$Gene %in% mouse_ASM$Gene,]
+
+ASM_5mer$ASM_group = "group2"
+ASM_5mer[str_count(ASM_5mer$masked_motif_seq, "N") > 0, ]$ASM_group = "group1"
+
+#save(ASM_5mer, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+#write.csv(ASM_5mer, file = "/Users/dayeapark/Desktop/ASM_group.csv")
+```
+
+## motif preferences [It needs to be run for further analysis.] (supplementary fig 7)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+
+## plot function 
+motif_freq_plot <- function (df) {
+  df_freq = data.frame(table(df$masked_motif_seq))
+  
+  ggplot(data = df_freq, aes(x=reorder(Var1, Freq), y = Freq)) +
+        geom_col(width = 0.7, fill = "darkgrey") +
+        theme_classic() +
+        theme(legend.position= "none")
+              #axis.text.x=element_text(angle = 90, hjust = 0),)
+}
+
+## Group 2 motif preference 
+#motif_freq_plot(mouse_prob85_5mer)   ## for all 
+
+group2 <- ASM_5mer[ASM_5mer$ASM_group == "group2", ]
+group2_moditf <- motif_freq_plot(group2)
+
+
+## Group 1 N position 
+#ggplot_logo(ASM_5mer[ASM_5mer$ASM_group == "group1", ], "masked_motif_seq", "ASM gourp1:5-mer masked seq")
+
+group1_Ncount = data.frame ( site = c("D", "R", "A", "C", "H"), 
+                             count = c(4, 1, 0, 0, 2), 
+                             level = c(1,2,3,4,5))
+
+group1_N <- ggplot(data = group1_Ncount, aes(x=reorder(site, level), y = count)) +
+              geom_col(width = 0.7, fill = "darkblue") +
+              theme_classic() +
+              theme(legend.position= "none")
+
+ggarrange(group1_N, group2_moditf, nrow = 1)
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/mouse_ASM_classification.pdf", width = 8, height = 4)
+```
+
+
+### 100-mers: search for SNPs near group2 ASM (supplementart figure 7D)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+
+group2 <- ASM_5mer[ASM_5mer$ASM_group == "group2", ]
+group2_moditf <- motif_freq_plot(group2)
+
+
+## all prob85: 9-mer 
+## The sum of two number = thried number (kmer size) -1
+# (-1), 3, 5  >> DRACH 
+#mouse_prob85_50mer = motif_seq_search( step6_prob85, (-23), 26, 50 ) 
+#mouse_prob85_100mer = motif_seq_search( step6_prob85, (-48), 51, 100 ) 
+mouse_prob85_150mer = motif_seq_search( step6_prob85, (-73), 76, 150 ) 
+#mouse_prob85_161mer = motif_seq_search( step6_prob85, (-79), 81, 161 ) 
+
+mouse_prob85_200mer = motif_seq_search( step6_prob85, (-98), 101, 200 ) 
+
+group2_nearby_snp_count <- function (large_kmer_seq_search) {
+    SNP_near_pos = Search_for_SNP_pos_mouse(large_kmer_seq_search, mouse_ASM$Gene)
+
+    ## ASM sites
+    ASM_SNP_near_pos = SNP_near_pos[SNP_near_pos$Gene %in% mouse_ASM$Gene, ]
+    
+    ASM_SNP_near_pos$N_count = str_count(ASM_SNP_near_pos$masked_motif_seq, "N")
+    
+    ASM_SNP_near_pos$ASM_group  = "group1" 
+    ASM_SNP_near_pos[ASM_SNP_near_pos$Gene %in% group2$Gene, ]$ASM_group <- "group2"
+    
+    ## count N nearby region 
+    #N_count_ASM <- ASM_SNP_near_pos[,c(3,17,18)]
+    N_count_ASM <- ASM_SNP_near_pos[,c(3,8,17, 18)]
+    ## print number of Ns in the range of sequence
+    count_snp <- length(unique(N_count_ASM[N_count_ASM$ASM_group == "group2" & N_count_ASM$N_count > 0,]$Gene))
+    group2_n <- length(unique(N_count_ASM[N_count_ASM$ASM_group == "group2",]$Gene))
+    
+    print(paste("SNP included group2 site count :", count_snp, "in total number of group2 ASM ", group2_n))
+    return(unique(N_count_ASM))
+    
+}
+
+#ncount = group2_nearby_snp_count(mouse_prob85_50mer)
+ncount = group2_nearby_snp_count(mouse_prob85_150mer)
+ncount = group2_nearby_snp_count(mouse_prob85_200mer)
+#ncount = group2_nearby_snp_count(mouse_prob85_100mer)
+#ncount = group2_nearby_snp_count(mouse_prob85_161mer)
+
+ncount$Nsite = 0
+ncount$direction = ""
+for (i in 1:nrow(ncount)) { 
+  Ncount = unlist(min(abs(unlist(gregexpr('N', ncount$masked_motif_seq[i])) - 100 )))
+  if(unlist(gregexpr('N', ncount$masked_motif_seq[i])) - 100  > 0) {
+  ncount$direction[i] = "plus"
+    } else if(unlist(gregexpr('N', ncount$masked_motif_seq[i])) - 100  < 0 ){
+   ncount$direction[i] = "minus" }
+  ncount$Nsite[i] <- Ncount
+  }
+
+
+```
+
+
+### Group1 modification ratio (supplemenatry Fig 8D) [Do not run this part]
+```{r}
+mESC_all_rep1_max = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/04_output_m6Anet/max_output/m6Anet_max_mESC_rep1_all.csv", header = TRUE, sep = ",")
+mESC_all_rep2_max = read.csv("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/04_output_m6Anet/max_output/m6Anet_max_mESC_rep2_all.csv", header = TRUE, sep = ",")
+mESC_all_rep1_max$gene = sapply(mESC_all_rep1_max$transcript_id, rename_default ) 
+mESC_all_rep2_max$gene = sapply(mESC_all_rep2_max$transcript_id, rename_default ) 
+mESC_all_rep1_max$Gene = paste0(mESC_all_rep1_max$gene, "_", mESC_all_rep1_max$transcript_position)
+mESC_all_rep2_max$Gene = paste0(mESC_all_rep2_max$gene, "_", mESC_all_rep2_max$transcript_position)
+mESC_all_rep1_max$rep = "rep1"
+mESC_all_rep2_max$rep = "rep2"
+
+all_sites_mouse = rbind(mESC_all_rep1_max[,c(7,2,9,3:6,8)], mESC_all_rep2_max[,c(7,2,9,3:6,8)])
+
+#save(all_sites_mouse, file ="/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_sites_mouse.Rdata")
+```
+
+## heatmap for mod ratio (supplemenatry Fig 8D)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/step6_prob85.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_sites_mouse.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/ASM_5mer.Rdata")
+
+
+all_sites_mouse_prob85 = all_sites_mouse[all_sites_mouse$probability_modified > 0.85 ,]
+kmer_prob85 <- all_sites_mouse_prob85[all_sites_mouse_prob85$Gene %in% step6_prob85$Gene, c(3,6,7)]
+kmer_prob85_mean <- kmer_prob85 %>% 
+                      group_by(kmer) %>% 
+                      summarise(mean_prob = mean(mod_ratio),
+                                freq = n())
+
+
+ggplot(kmer_prob85_mean, aes(x=reorder(kmer, -freq), y=freq)) + 
+  geom_bar(stat = "identity")  +
+ geom_text(aes(y = freq, label = freq)) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/mouse_group1_motif.pdf", width = 8, height = 4)
+
+## Group1 matrix
+group1_gene = ASM_5mer[ASM_5mer$ASM_group == "group1",]$Gene
+group1_table = matrix(0, nrow  =  length(group1_gene), 
+                      ncol = nrow(kmer_prob85_mean))
+
+colnames(group1_table) = kmer_prob85_mean$kmer
+rownames(group1_table) = group1_gene
+alt = ASM_5mer[ASM_5mer$Gene %in% group1_gene, c(3,9,11)]
+ref = ASM_5mer[ASM_5mer$Gene %in% group1_gene, c(3,10,12)]
+colnames(alt) = colnames(ref) = c("Gene", "kmer", "modratio")
+group1_mod_ratio = rbind(alt, ref)
+
+for (i in 1:nrow(group1_mod_ratio)) {
+  group1_table[ group1_mod_ratio$Gene[i], group1_mod_ratio$kmer[i] ] <- group1_mod_ratio$modratio[i]
+}
+
+
+all_mod_ratio_pre = data.frame(kmer_prob85_mean[,c(1,2)])
+all_mod_ratio_pre$Gene = "all"
+all_mod_ratio = all_mod_ratio_pre[,c(3,1,2)]
+colnames(all_mod_ratio) <- colnames(group1_mod_ratio)
+
+include_all_ASM_moratio = data.table(rbind(all_mod_ratio, group1_mod_ratio))
+
+
+merge_all_fre_mod <- merge(include_all_ASM_moratio, kmer_prob85_mean[,c(1,3)], all = TRUE)
+
+ggplot(merge_all_fre_mod, aes(x = reorder(kmer, -freq) , y = Gene, fill = modratio)) + 
+  geom_tile() +
+  scale_fill_gradientn(colours=c("white","red"), limits=c(0.2,1)) + 
+  #scale_fill_gradient(low="white", high="red") + 
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/mouse_group1_motif.pdf", width = 8, height = 4)
+
+```
+
+### (frequency) plot for "TCTGACT" motif modification ratio (supplementary fig 8C)
+```{r}
+## all prob85: 7-mer 
+prob85_drach_7mer = motif_seq_search( step6_prob85, (-3), 3, 7 ) # D-2 site to H site >> 7 mer
+
+## including non-SNP nucleotides (7mer)
+prob85_drach_7mer_snp_pos = Search_for_SNP_pos_mouse(prob85_drach_7mer)
+SNP_included_sites_7mer = prob85_drach_7mer_snp_pos[!(prob85_drach_7mer_snp_pos$SNP_pos == "none"),]
+
+nonSNP_drach_7mer = prob85_drach_7mer[!(prob85_drach_7mer$Gene %in% SNP_included_sites_7mer$Gene), ]
+
+## Frequency cmparison
+motif_list_7mer_freq = data.frame( table(nonSNP_drach_7mer$masked_motif_seq))
+motif_list_TGACT_freq = motif_list_7mer_freq[substr(motif_list_7mer_freq$Var1, 3,7) == "TGACT", ]
+
+plot_label_function <- function (df) { 
+  df$label = "1_none"
+  df[df$Var1 == "TCTGACT",]$label = "2_high"
+  df[df$Var1 == "TATGACT", ]$label = "3_low_TATGACT"
+  df[df$Var1 == "TGTGACT", ]$label = "4_low_TGTGACT"
+  
+  ggplot(df, aes(x=reorder(Var1, -Freq), y=Freq, fill = label)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("darkgrey", "red", "blue","darkblue") ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  
+  }
+
+#plot_label_function(motif_list_7mer)
+plot_label_function(motif_list_TGACT)
+
+
+```
+
+## (mod ratio) plot for "TCTGACT" motif modification ratio (supplementary fig 8C) - Do not run this part
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_sites_mouse.Rdata")
+find_all_sites_mod_ratio <- function (df, adding_num_start, adding_num_end, kmer_num) {
+    df_motif = add_entire_sequence(df)
+    df_motif$start_pos = df_motif$transcript_position + adding_num_start
+    df_motif$end_pos = df_motif$transcript_position + adding_num_end
+      
+    df_motif$masked_motif_seq = substr(df_motif$masked_seq, df_motif$start_pos, df_motif$end_pos)
+    df_motif$ALT_motif_seq = substr(df_motif$ALT_seq, df_motif$start_pos, df_motif$end_pos)
+    df_motif$REF_motif_seq = substr(df_motif$REF_seq, df_motif$start_pos, df_motif$end_pos)
+    final_df <- df_motif[nchar(df_motif$masked_motif_seq ) == kmer_num, ]
+    return(final_df[,c("Gene", "masked_motif_seq", "ALT_motif_seq", "REF_motif_seq")])
+    }
+
+all_kmer_seq <- find_all_sites_mod_ratio(all_sites_mouse[all_sites_mouse$rep == "rep1", ],(-3), 3, 7 )
+
+#save(all_kmer_seq, file = "/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_kmer_seq.Rdata")
+```
+
+## (mod ratio) plot for "TCTGACT" motif modification ratio (supplementary fig 8C)
+```{r}
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_sites_mouse.Rdata")
+load("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/Rdata.nosync/mouse_final/all_kmer_seq.Rdata")
+
+all_kmer_seq_mod = merge(all_kmer_seq, all_sites_mouse[all_sites_mouse$rep == "rep1", c("Gene","mod_ratio","probability_modified")]) 
+
+all_kmer_seq_mod_prob85 = all_kmer_seq_mod[all_kmer_seq_mod$probability_modified > 0.85, ]
+all_kmer_seq_mod_mod = all_kmer_seq_mod_prob85[substr(all_kmer_seq_mod_prob85$masked_motif_seq, 3,7) == "TGACT", ]
+
+select_motif = c("TGTGACT", "TCTGACT", "TATGACT")
+N_select = c("ANTGACT", "CNTGACT","GNTGACT", "NATGACT","NCTGACT", "NGTGACT", "NTTGACT", "TNTGACT")
+
+prob85_drach_7mer_mod <- all_kmer_seq_mod_mod %>% 
+                      group_by(masked_motif_seq) %>% 
+                      summarise(mean_mod = mean(mod_ratio),
+                                freq = n())
+
+TGACT_freq_plot <- function (df) {
+  df$label = "TGACT"
+  ggplot(df, aes(x = reorder(masked_motif_seq, -freq) , y = label, fill = mean_mod)) + 
+    geom_tile() +
+    scale_fill_gradientn(colours=c("white","red"), limits=c(0.4,1) )+ 
+    theme_classic()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+}
+#TGACT_freq_plot(prob85_drach_7mer_mod)
+#TGACT_freq_plot(prob85_drach_7mer_mod[prob85_drach_7mer_mod$masked_motif_seq %in% select_motif,])
+TGACT_freq_plot(prob85_drach_7mer_mod[!(prob85_drach_7mer_mod$masked_motif_seq %in% N_select), ])
+
+#ggsave("/Users/dayeapark/Documents/01_CenikLab/04_code/2022_code/Project/07_m6A/01_Figure/supple/sup8c_heatmap_mod.pdf", width = 8, height = 2)
+
+```
